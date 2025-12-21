@@ -64,25 +64,25 @@ if [ -z "$OUTPUT_DIR" ]; then
     exit 1
 fi
 
-# Build command
-CMD="python3 rip_disc.py --output \"$OUTPUT_DIR\""
+# Build command array
+CMD_ARGS=(python3 rip_disc.py --output "$OUTPUT_DIR")
 
 if [ -n "$DISC" ]; then
-    CMD="$CMD --disc \"$DISC\""
+    CMD_ARGS+=(--disc "$DISC")
 fi
 
 if [ -n "$TEMP_DIR" ]; then
-    CMD="$CMD --temp \"$TEMP_DIR\""
+    CMD_ARGS+=(--temp "$TEMP_DIR")
 fi
 
 if [ -n "$TITLE" ]; then
-    CMD="$CMD --title \"$TITLE\""
+    CMD_ARGS+=(--title "$TITLE")
 fi
 
 if [ -n "$YEAR" ]; then
-    CMD="$CMD --year $YEAR"
+    CMD_ARGS+=(--year "$YEAR")
 fi
 
 # Execute
 echo "Ripping movie disc..."
-eval "$CMD"
+"${CMD_ARGS[@]}"

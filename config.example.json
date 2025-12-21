@@ -1,7 +1,5 @@
-# Example configuration file for media encoding
-# Copy this to config.json and customize as needed
-
 {
+    "_comment": "Example configuration file for media encoding - Copy this to config.json and customize as needed",
     "disc": {
         "default_path": "disc:0",
         "default_temp_dir": "/tmp/makemkv"

@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -37,8 +38,7 @@ class DiscRipper:
         missing = []
         
         for tool in tools:
-            result = subprocess.run(['which', tool], capture_output=True, text=True)
-            if result.returncode != 0:
+            if shutil.which(tool) is None:
                 missing.append(tool)
                 
         if missing:

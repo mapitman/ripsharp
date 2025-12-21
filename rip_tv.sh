@@ -64,25 +64,25 @@ if [ -z "$OUTPUT_DIR" ]; then
     exit 1
 fi
 
-# Build command
-CMD="python3 rip_disc.py --output \"$OUTPUT_DIR\" --tv"
+# Build command array
+CMD_ARGS=(python3 rip_disc.py --output "$OUTPUT_DIR" --tv)
 
 if [ -n "$DISC" ]; then
-    CMD="$CMD --disc \"$DISC\""
+    CMD_ARGS+=(--disc "$DISC")
 fi
 
 if [ -n "$TEMP_DIR" ]; then
-    CMD="$CMD --temp \"$TEMP_DIR\""
+    CMD_ARGS+=(--temp "$TEMP_DIR")
 fi
 
 if [ -n "$TITLE" ]; then
-    CMD="$CMD --title \"$TITLE\""
+    CMD_ARGS+=(--title "$TITLE")
 fi
 
 if [ -n "$SEASON" ]; then
-    CMD="$CMD --season $SEASON"
+    CMD_ARGS+=(--season "$SEASON")
 fi
 
 # Execute
 echo "Ripping TV series disc..."
-eval "$CMD"
+"${CMD_ARGS[@]}"
