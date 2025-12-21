@@ -151,6 +151,32 @@ Rip TV series episodes:
 ./rip_disc.py --disc disc:0 --tv --title "Friends" --season 1 --output ~/TV
 ```
 
+### Batch Processing
+
+For processing multiple discs in sequence, use the batch scripts:
+
+**Batch Movie Ripping:**
+```bash
+# Edit batch_rip_movies.sh to add your movie list
+nano batch_rip_movies.sh
+
+# Then run the batch script
+./batch_rip_movies.sh
+```
+
+**Batch TV Season Ripping:**
+```bash
+# Edit batch_rip_tv_season.sh to configure your series
+nano batch_rip_tv_season.sh
+
+# Then run the batch script
+./batch_rip_tv_season.sh
+```
+
+The batch scripts will prompt you to insert each disc in sequence, making it easy to process your entire collection.
+
+**More Examples:** See [EXAMPLES.md](EXAMPLES.md) for comprehensive usage examples including 4K UHD, multiple drives, network storage, and more.
+
 ## How It Works
 
 ### 1. Disc Scanning
