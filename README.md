@@ -36,10 +36,15 @@ Tools and scripts for ripping, encoding and organizing media files from DVDs, Bl
 3. **Python 3.7+** - For running the main script
    ```bash
    # Ubuntu/Debian
-   sudo apt-get install python3
+   sudo apt-get install python3 python3-pip
    
    # macOS (usually pre-installed)
    brew install python3
+   ```
+
+4. **Python dependencies** - PyYAML for configuration file support
+   ```bash
+   pip install -r requirements.txt
    ```
 
 ### Hardware Requirements
@@ -56,12 +61,17 @@ Tools and scripts for ripping, encoding and organizing media files from DVDs, Bl
    cd media-encoding
    ```
 
-2. Make scripts executable:
+2. Install Python dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+3. Make scripts executable:
    ```bash
    chmod +x rip_disc.py rip_movie.sh rip_tv.sh
    ```
 
-3. Verify dependencies are installed:
+4. Verify dependencies are installed:
    ```bash
    ./rip_disc.py --help
    ```
@@ -223,6 +233,38 @@ The script uses `makemkvcon` to scan the disc and gather information about all t
 - Example: `Breaking Bad - S01E01.mkv`
 
 ## Configuration
+
+### Configuration File
+
+You can use a YAML configuration file to set default values and avoid passing them as command-line arguments each time:
+
+1. Copy the example configuration:
+   ```bash
+   cp config.example.yaml config.yaml
+   ```
+
+2. Edit `config.yaml` with your preferred settings:
+   ```yaml
+   disc:
+     default_path: "disc:0"
+     default_temp_dir: "/tmp/makemkv"
+   
+   output:
+     movies_dir: "~/Movies"
+     tv_dir: "~/TV Shows"
+   
+   encoding:
+     include_english_subtitles: true
+     include_stereo_audio: true
+     include_surround_audio: true
+   ```
+
+3. Use the configuration file with the `--config` option:
+   ```bash
+   ./rip_disc.py --config config.yaml --output ~/Movies --title "Movie Name"
+   ```
+
+Configuration values can be overridden by command-line arguments.
 
 ### Temporary Directory
 

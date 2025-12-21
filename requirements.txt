@@ -1,8 +1,8 @@
 # Python requirements for media-encoding
 # Install with: pip install -r requirements.txt
 
-# No required dependencies for basic functionality
-# The script uses only Python standard library modules
+# Required for YAML configuration support
+pyyaml>=6.0
 
 # Optional dependencies for future enhancements:
 

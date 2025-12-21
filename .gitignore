@@ -44,7 +44,8 @@ ENV/
 Thumbs.db
 
 # Configuration files with secrets
-config.json
+config.yaml
+config.yml
 
 # Media files (don't commit large video files)
 *.mkv

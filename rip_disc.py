@@ -15,6 +15,15 @@ import sys
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple
 
+try:
+    import yaml
+    YAML_AVAILABLE = True
+except ImportError:
+    YAML_AVAILABLE = False
+    logger = logging.getLogger(__name__)
+    logger.warning("PyYAML not installed. Configuration file support disabled. "
+                  "Install with: pip install pyyaml")
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -22,15 +31,55 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Constants
+MIN_EPISODE_DURATION_SECONDS = 1200  # 20 minutes
+MAX_EPISODE_DURATION_SECONDS = 3600  # 60 minutes
+MIN_MOVIE_DURATION_SECONDS = 2700    # 45 minutes
+
+# Regex pattern for sanitizing filenames
+FILENAME_SANITIZE_PATTERN = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+
 
 class DiscRipper:
     """Handles disc ripping and encoding operations."""
     
-    def __init__(self, output_dir: str, temp_dir: str = "/tmp/makemkv"):
+    def __init__(self, output_dir: str, temp_dir: str = "/tmp/makemkv", config: Optional[Dict] = None):
         self.output_dir = Path(output_dir)
         self.temp_dir = Path(temp_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.temp_dir.mkdir(parents=True, exist_ok=True)
+        self.config = config or {}
+    
+    @staticmethod
+    def load_config(config_path: str) -> Optional[Dict]:
+        """
+        Load configuration from YAML file.
+        
+        Args:
+            config_path: Path to YAML configuration file
+            
+        Returns:
+            Configuration dictionary or None if loading fails
+        """
+        if not YAML_AVAILABLE:
+            logger.error("PyYAML not installed. Cannot load configuration file.")
+            logger.error("Install with: pip install pyyaml")
+            return None
+        
+        try:
+            with open(config_path, 'r') as f:
+                config = yaml.safe_load(f)
+                logger.info(f"Loaded configuration from {config_path}")
+                return config
+        except FileNotFoundError:
+            logger.error(f"Configuration file not found: {config_path}")
+            return None
+        except yaml.YAMLError as e:
+            logger.error(f"Error parsing YAML configuration: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Error loading configuration: {e}")
+            return None
         
     def check_dependencies(self) -> bool:
         """Check if required tools are installed."""
@@ -188,12 +237,12 @@ class DiscRipper:
             return []
         
         if is_tv_series:
-            # For TV series, find all episodes (typically 20-50 minutes each)
+            # For TV series, find all episodes (typically 20-60 minutes each)
             episodes = []
             for title in titles:
                 duration = title.get('duration', 0)
-                # Episodes typically 20-50 minutes (1200-3000 seconds)
-                if 1200 <= duration <= 3600 and title.get('chapters', 0) >= 1:
+                if (MIN_EPISODE_DURATION_SECONDS <= duration <= MAX_EPISODE_DURATION_SECONDS 
+                    and title.get('chapters', 0) >= 1):
                     episodes.append(int(title['id']))
             
             # Sort by title ID to maintain episode order
@@ -202,10 +251,17 @@ class DiscRipper:
             return episodes
         else:
             # For movies, find the longest title (main feature)
-            longest_title = max(titles, key=lambda t: t.get('duration', 0))
+            # Filter titles with some minimum duration first to avoid errors
+            valid_titles = [t for t in titles if t.get('duration', 0) > 0]
+            
+            if not valid_titles:
+                logger.warning("No valid titles with duration found")
+                return []
+            
+            longest_title = max(valid_titles, key=lambda t: t.get('duration', 0))
             
             # Main movie should be at least 45 minutes
-            if longest_title.get('duration', 0) >= 2700:
+            if longest_title.get('duration', 0) >= MIN_MOVIE_DURATION_SECONDS:
                 logger.info(f"Identified main movie: Title {longest_title['id']} "
                           f"({longest_title.get('duration', 0) // 60} minutes)")
                 return [int(longest_title['id'])]
@@ -434,8 +490,8 @@ class DiscRipper:
         year = metadata.get('year', '')
         media_type = metadata.get('type', 'movie')
         
-        # Clean title for filename
-        safe_title = re.sub(r'[<>:"/\\|?*]', '', title)
+        # Clean title for filename (remove invalid characters)
+        safe_title = FILENAME_SANITIZE_PATTERN.sub('', title)
         safe_title = safe_title.strip()
         
         if media_type == 'tv' and episode_num is not None:
@@ -553,6 +609,11 @@ def main():
     )
     
     parser.add_argument(
+        '--config',
+        help='Path to YAML configuration file'
+    )
+    
+    parser.add_argument(
         '--disc',
         default='disc:0',
         help='Disc path (default: disc:0 for first drive)'
@@ -605,8 +666,23 @@ def main():
     if args.debug:
         logging.getLogger().setLevel(logging.DEBUG)
     
+    # Load configuration if specified
+    config = None
+    if args.config:
+        config = DiscRipper.load_config(args.config)
+        if config is None:
+            logger.error("Failed to load configuration file")
+            sys.exit(1)
+        
+        # Apply config defaults if command-line args not specified
+        if args.disc == 'disc:0' and config.get('disc', {}).get('default_path'):
+            args.disc = config['disc']['default_path']
+        
+        if args.temp == '/tmp/makemkv' and config.get('disc', {}).get('default_temp_dir'):
+            args.temp = config['disc']['default_temp_dir']
+    
     # Create ripper instance
-    ripper = DiscRipper(args.output, args.temp)
+    ripper = DiscRipper(args.output, args.temp, config)
     
     # Process disc
     output_files = ripper.process_disc(

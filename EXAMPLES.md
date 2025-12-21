@@ -2,6 +2,40 @@
 
 This document provides practical examples for using the media encoding scripts.
 
+## Configuration File Examples
+
+### Using a Configuration File
+
+Create a `config.yaml` file to set your preferences:
+
+```yaml
+disc:
+  default_path: "disc:0"
+  default_temp_dir: "/mnt/ssd/temp"
+
+output:
+  movies_dir: "~/Movies"
+  tv_dir: "~/TV Shows"
+
+encoding:
+  include_english_subtitles: true
+  include_stereo_audio: true
+  include_surround_audio: true
+  min_movie_duration_seconds: 2700
+  min_episode_duration_seconds: 1200
+  max_episode_duration_seconds: 3600
+```
+
+Then use it with your rips:
+
+```bash
+# Use configuration file
+./rip_disc.py --config config.yaml --output ~/Movies --title "Movie Name" --year 2024
+
+# Configuration values can be overridden
+./rip_disc.py --config config.yaml --output ~/Movies --temp /tmp/custom --title "Movie"
+```
+
 ## Basic Examples
 
 ### Rip a Single Movie
