@@ -4,9 +4,9 @@ This document provides practical examples for using the media encoding scripts.
 
 ## Configuration File Examples
 
-### Using a Configuration File
+### Using a Configuration File with Online Metadata Lookup
 
-Create a `config.yaml` file to set your preferences:
+Create a `config.yaml` file to set your preferences and enable online metadata:
 
 ```yaml
 disc:
@@ -24,16 +24,21 @@ encoding:
   min_movie_duration_seconds: 2700
   min_episode_duration_seconds: 1200
   max_episode_duration_seconds: 3600
+
+metadata:
+  lookup_enabled: true
+  tmdb_api_key: "your_tmdb_api_key_here"
 ```
 
 Then use it with your rips:
 
 ```bash
-# Use configuration file
-./rip_disc.py --config config.yaml --output ~/Movies --title "Movie Name" --year 2024
+# Use configuration file with online metadata lookup
+./rip_disc.py --config config.yaml --output ~/Movies --title "inception"
+# The script will search TMDB and properly name the file: Inception (2010).mkv
 
 # Configuration values can be overridden
-./rip_disc.py --config config.yaml --output ~/Movies --temp /tmp/custom --title "Movie"
+./rip_disc.py --config config.yaml --output ~/Movies --temp /tmp/custom --title "avatar"
 ```
 
 ## Basic Examples
@@ -66,6 +71,31 @@ Then use it with your rips:
 ```
 
 ## Advanced Examples
+
+### Online Metadata Lookup
+
+Using TMDB for automatic metadata retrieval:
+
+```bash
+# Movie with online lookup (approximation of title is fine)
+./rip_disc.py --config config.yaml --output ~/Movies --title "dark knight"
+# TMDB will find: The Dark Knight (2008).mkv
+
+# TV series with online lookup
+./rip_disc.py --config config.yaml --output ~/TV --tv --title "game of thrones" --season 1
+# TMDB will find: Game of Thrones - S01E01.mkv, etc.
+
+# If year is ambiguous, provide it for better matching
+./rip_disc.py --config config.yaml --output ~/Movies --title "dune" --year 2021
+# Ensures you get Dune (2021) not Dune (1984)
+```
+
+**Benefits of online metadata lookup:**
+- Correct capitalization and formatting
+- Accurate release years
+- Proper series names
+- Genre information (stored in metadata)
+- Plot summaries and ratings
 
 ### Using the Python Script Directly
 

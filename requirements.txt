@@ -4,14 +4,14 @@
 # Required for YAML configuration support
 pyyaml>=6.0
 
-# Optional dependencies for future enhancements:
+# Required for online disc and metadata identification
+requests>=2.31.0
 
-# For TMDB metadata lookup (if implementing)
-# tmdbsimple>=2.9.1
+# Optional dependencies for enhanced features:
 
-# For TVDB metadata lookup (if implementing)
-# tvdb_v4_official>=1.0.0
+# For TMDB metadata lookup
+tmdbsimple>=2.9.1
 
-# For better CLI argument parsing and progress bars
+# For better CLI progress display
 # tqdm>=4.65.0
 # colorama>=0.4.6

@@ -2,9 +2,11 @@
 """
 Media Disc Ripping and Encoding Script
 Rips DVDs, Blu-Ray, and UltraHD discs using makemkvcon and re-encodes them with optimal settings.
+Includes online disc and metadata identification support.
 """
 
 import argparse
+import hashlib
 import json
 import logging
 import os
@@ -30,6 +32,22 @@ except ImportError:
     logger.warning("PyYAML not installed. Configuration file support disabled. "
                   "Install with: pip install pyyaml")
 
+try:
+    import requests
+    REQUESTS_AVAILABLE = True
+except ImportError:
+    REQUESTS_AVAILABLE = False
+    logger.warning("requests library not installed. Online disc identification disabled. "
+                  "Install with: pip install requests")
+
+try:
+    import tmdbsimple as tmdb
+    TMDB_AVAILABLE = True
+except ImportError:
+    TMDB_AVAILABLE = False
+    logger.info("tmdbsimple not installed. TMDB metadata lookup disabled. "
+                "Install with: pip install tmdbsimple")
+
 # Constants
 MIN_EPISODE_DURATION_SECONDS = 1200  # 20 minutes
 MAX_EPISODE_DURATION_SECONDS = 3600  # 60 minutes
@@ -41,6 +59,196 @@ MIN_EPISODE_CHAPTERS = 1              # Minimum chapters to consider as episode
 # and control characters \x00-\x1f (ASCII 0-31)
 FILENAME_SANITIZE_PATTERN = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
+# Online service endpoints
+MUSICBRAINZ_API = "https://musicbrainz.org/ws/2"
+DISCID_LOOKUP_API = "https://musicbrainz.org/ws/2/discid"
+
+
+class OnlineDiscIdentifier:
+    """Handles online disc identification using various databases."""
+    
+    def __init__(self, config: Optional[Dict] = None):
+        self.config = config or {}
+        self.tmdb_api_key = self.config.get('metadata', {}).get('tmdb_api_key', '')
+        
+        if self.tmdb_api_key and TMDB_AVAILABLE:
+            tmdb.API_KEY = self.tmdb_api_key
+            logger.info("TMDB API configured for metadata lookup")
+    
+    def calculate_disc_id(self, disc_path: str) -> Optional[str]:
+        """
+        Calculate disc ID from the physical disc.
+        This can be used for MusicBrainz lookups.
+        
+        Args:
+            disc_path: Path to disc device
+            
+        Returns:
+            Disc ID string or None if calculation fails
+        """
+        try:
+            # Try to use discid library if available
+            try:
+                import discid
+                disc = discid.read(disc_path)
+                logger.info(f"Calculated disc ID: {disc.id}")
+                return disc.id
+            except ImportError:
+                logger.debug("discid library not available, skipping disc ID calculation")
+                return None
+        except Exception as e:
+            logger.debug(f"Could not calculate disc ID: {e}")
+            return None
+    
+    def lookup_disc_musicbrainz(self, disc_id: str) -> Optional[Dict]:
+        """
+        Look up disc information from MusicBrainz.
+        Primarily useful for audio CDs but can provide disc metadata.
+        
+        Args:
+            disc_id: Disc ID string
+            
+        Returns:
+            Disc metadata dictionary or None
+        """
+        if not REQUESTS_AVAILABLE:
+            return None
+        
+        try:
+            headers = {
+                'User-Agent': 'MediaEncoding/1.0 (https://github.com/mapitman/media-encoding)'
+            }
+            
+            url = f"{MUSICBRAINZ_API}/discid/{disc_id}"
+            params = {'fmt': 'json', 'inc': 'recordings+artist-credits'}
+            
+            response = requests.get(url, headers=headers, params=params, timeout=10)
+            
+            if response.status_code == 200:
+                data = response.json()
+                logger.info(f"Found disc in MusicBrainz: {data.get('title', 'Unknown')}")
+                return data
+            else:
+                logger.debug(f"Disc not found in MusicBrainz: {response.status_code}")
+                return None
+                
+        except Exception as e:
+            logger.debug(f"MusicBrainz lookup failed: {e}")
+            return None
+    
+    def search_tmdb_movie(self, title: str, year: Optional[int] = None) -> Optional[Dict]:
+        """
+        Search for movie metadata on TMDB.
+        
+        Args:
+            title: Movie title to search for
+            year: Optional release year for better matching
+            
+        Returns:
+            Movie metadata dictionary or None
+        """
+        if not TMDB_AVAILABLE or not self.tmdb_api_key:
+            logger.debug("TMDB search not available (missing library or API key)")
+            return None
+        
+        try:
+            search = tmdb.Search()
+            
+            # Search for the movie
+            if year:
+                response = search.movie(query=title, year=year)
+            else:
+                response = search.movie(query=title)
+            
+            if search.results:
+                # Get the first (best) match
+                result = search.results[0]
+                
+                # Get detailed information
+                movie = tmdb.Movies(result['id'])
+                info = movie.info()
+                
+                logger.info(f"Found movie on TMDB: {info.get('title')} ({info.get('release_date', '')[:4]})")
+                
+                return {
+                    'title': info.get('title'),
+                    'original_title': info.get('original_title'),
+                    'year': int(info.get('release_date', '')[:4]) if info.get('release_date') else None,
+                    'overview': info.get('overview'),
+                    'genres': [g['name'] for g in info.get('genres', [])],
+                    'runtime': info.get('runtime'),
+                    'imdb_id': info.get('imdb_id'),
+                    'tmdb_id': info.get('id'),
+                    'poster_path': info.get('poster_path'),
+                    'backdrop_path': info.get('backdrop_path'),
+                    'vote_average': info.get('vote_average'),
+                    'type': 'movie'
+                }
+            else:
+                logger.info(f"No TMDB results found for: {title}")
+                return None
+                
+        except Exception as e:
+            logger.warning(f"TMDB movie search failed: {e}")
+            return None
+    
+    def search_tmdb_tv(self, title: str, year: Optional[int] = None) -> Optional[Dict]:
+        """
+        Search for TV series metadata on TMDB.
+        
+        Args:
+            title: TV series title to search for
+            year: Optional first air year for better matching
+            
+        Returns:
+            TV series metadata dictionary or None
+        """
+        if not TMDB_AVAILABLE or not self.tmdb_api_key:
+            logger.debug("TMDB search not available (missing library or API key)")
+            return None
+        
+        try:
+            search = tmdb.Search()
+            
+            # Search for the TV series
+            if year:
+                response = search.tv(query=title, first_air_date_year=year)
+            else:
+                response = search.tv(query=title)
+            
+            if search.results:
+                # Get the first (best) match
+                result = search.results[0]
+                
+                # Get detailed information
+                tv = tmdb.TV(result['id'])
+                info = tv.info()
+                
+                logger.info(f"Found TV series on TMDB: {info.get('name')} ({info.get('first_air_date', '')[:4]})")
+                
+                return {
+                    'title': info.get('name'),
+                    'original_title': info.get('original_name'),
+                    'year': int(info.get('first_air_date', '')[:4]) if info.get('first_air_date') else None,
+                    'overview': info.get('overview'),
+                    'genres': [g['name'] for g in info.get('genres', [])],
+                    'number_of_seasons': info.get('number_of_seasons'),
+                    'number_of_episodes': info.get('number_of_episodes'),
+                    'tmdb_id': info.get('id'),
+                    'poster_path': info.get('poster_path'),
+                    'backdrop_path': info.get('backdrop_path'),
+                    'vote_average': info.get('vote_average'),
+                    'episode_run_time': info.get('episode_run_time'),
+                    'type': 'tv'
+                }
+            else:
+                logger.info(f"No TMDB results found for TV series: {title}")
+                return None
+                
+        except Exception as e:
+            logger.warning(f"TMDB TV search failed: {e}")
+            return None
+
 
 class DiscRipper:
     """Handles disc ripping and encoding operations."""
@@ -51,6 +259,9 @@ class DiscRipper:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.temp_dir.mkdir(parents=True, exist_ok=True)
         self.config = config or {}
+        
+        # Initialize online disc identifier
+        self.online_identifier = OnlineDiscIdentifier(self.config)
     
     @staticmethod
     def load_config(config_path: str) -> Optional[Dict]:
@@ -448,25 +659,59 @@ class DiscRipper:
             return False
     
     def lookup_metadata(self, title: str, is_tv_series: bool = False,
-                       year: Optional[int] = None) -> Optional[Dict]:
+                       year: Optional[int] = None, disc_path: Optional[str] = None) -> Optional[Dict]:
         """
-        Look up metadata for the media online.
-        This is a placeholder - in production, you'd integrate with TMDB, TVDB, etc.
+        Look up metadata for the media online using TMDB and disc identification.
         
         Args:
             title: Title to search for
             is_tv_series: True if searching for TV series
             year: Optional year for better matching
+            disc_path: Optional disc path for disc ID calculation
             
         Returns:
             Dictionary with metadata or None
         """
         logger.info(f"Looking up metadata for: {title}")
         
-        # Placeholder implementation
-        # In production, integrate with TMDB API or similar
-        logger.warning("Metadata lookup not implemented - using disc title")
+        # Check if metadata lookup is enabled in config
+        metadata_config = self.config.get('metadata', {})
+        lookup_enabled = metadata_config.get('lookup_enabled', True)
         
+        if not lookup_enabled:
+            logger.info("Metadata lookup disabled in configuration")
+            return {
+                'title': title,
+                'year': year,
+                'type': 'tv' if is_tv_series else 'movie'
+            }
+        
+        # Try disc identification first if disc path is provided
+        if disc_path and REQUESTS_AVAILABLE:
+            disc_id = self.online_identifier.calculate_disc_id(disc_path)
+            if disc_id:
+                disc_info = self.online_identifier.lookup_disc_musicbrainz(disc_id)
+                if disc_info:
+                    # MusicBrainz found something - primarily for audio CDs
+                    # but log it for informational purposes
+                    logger.info(f"MusicBrainz disc info: {disc_info.get('title', 'Unknown')}")
+        
+        # Look up content metadata from TMDB
+        metadata = None
+        
+        if is_tv_series:
+            # Search for TV series
+            metadata = self.online_identifier.search_tmdb_tv(title, year)
+        else:
+            # Search for movie
+            metadata = self.online_identifier.search_tmdb_movie(title, year)
+        
+        # If online lookup succeeded, return the metadata
+        if metadata:
+            return metadata
+        
+        # Fallback to basic metadata if online lookup failed
+        logger.info("Using disc title as fallback")
         return {
             'title': title,
             'year': year,
@@ -559,8 +804,8 @@ class DiscRipper:
             logger.error("Failed to rip any titles")
             return []
         
-        # Look up metadata
-        metadata = self.lookup_metadata(title, is_tv_series, year)
+        # Look up metadata (pass disc_path for disc identification)
+        metadata = self.lookup_metadata(title, is_tv_series, year, disc_path)
         if not metadata:
             metadata = {'title': title, 'year': year, 
                        'type': 'tv' if is_tv_series else 'movie'}

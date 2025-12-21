@@ -22,6 +22,9 @@ naming:
   tv_format: "{title} - S{season:02d}E{episode:02d}.mkv"
 
 metadata:
-  lookup_enabled: false
+  # Enable online metadata lookup
+  lookup_enabled: true
+  
+  # TMDB API key for movie and TV series metadata
+  # Get your free API key at: https://www.themoviedb.org/settings/api
   tmdb_api_key: ""
-  tvdb_api_key: ""

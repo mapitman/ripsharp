@@ -6,10 +6,12 @@ Tools and scripts for ripping, encoding and organizing media files from DVDs, Bl
 
 - **Automatic disc scanning** - Detects and analyzes all titles on the disc
 - **Smart content detection** - Identifies main movie or TV episodes automatically
+- **Online disc identification** - Uses MusicBrainz for disc ID lookup
+- **Online metadata lookup** - Fetches movie and TV metadata from TMDB (The Movie Database)
 - **Optimal quality** - Rips at the highest available resolution
 - **Audio track selection** - Includes both stereo and surround sound audio when available
 - **Subtitle support** - Automatically includes English subtitles if present
-- **Metadata lookup** - Attempts to identify and properly name media files
+- **Intelligent file naming** - Uses online metadata for accurate naming
 - **Batch processing** - Can process entire TV season discs at once
 
 ## Requirements
@@ -42,10 +44,20 @@ Tools and scripts for ripping, encoding and organizing media files from DVDs, Bl
    brew install python3
    ```
 
-4. **Python dependencies** - PyYAML for configuration file support
+4. **Python dependencies** - Required libraries for functionality
    ```bash
    pip install -r requirements.txt
    ```
+   
+   **Required packages:**
+   - `pyyaml` - YAML configuration file support
+   - `requests` - Online disc identification
+   - `tmdbsimple` - TMDB metadata lookup
+
+5. **TMDB API Key** (Optional but recommended) - For online metadata lookup
+   - Sign up for a free account at [TMDB](https://www.themoviedb.org/signup)
+   - Get your API key at [TMDB API Settings](https://www.themoviedb.org/settings/api)
+   - Add it to your `config.yaml` file
 
 ### Hardware Requirements
 
@@ -257,6 +269,10 @@ You can use a YAML configuration file to set default values and avoid passing th
      include_english_subtitles: true
      include_stereo_audio: true
      include_surround_audio: true
+   
+   metadata:
+     lookup_enabled: true
+     tmdb_api_key: "your_api_key_here"
    ```
 
 3. Use the configuration file with the `--config` option:
@@ -265,6 +281,44 @@ You can use a YAML configuration file to set default values and avoid passing th
    ```
 
 Configuration values can be overridden by command-line arguments.
+
+### Online Metadata Lookup
+
+The script can automatically fetch movie and TV series metadata from TMDB (The Movie Database) to ensure accurate file naming and metadata:
+
+1. **Get a TMDB API Key:**
+   - Sign up at [https://www.themoviedb.org/signup](https://www.themoviedb.org/signup)
+   - Navigate to [API Settings](https://www.themoviedb.org/settings/api)
+   - Request an API key (choose "Developer" option)
+   - Copy your API key
+
+2. **Configure the API Key:**
+   Add it to your `config.yaml`:
+   ```yaml
+   metadata:
+     lookup_enabled: true
+     tmdb_api_key: "your_api_key_here"
+   ```
+
+3. **Features:**
+   - Automatic movie title and year lookup
+   - TV series name and season information
+   - Enhanced metadata (genres, ratings, descriptions)
+   - Accurate file naming based on official titles
+   - Disc identification using MusicBrainz (when available)
+
+4. **Usage:**
+   ```bash
+   # The script will automatically look up metadata
+   ./rip_movie.sh --title "inception" --output ~/Movies
+   # Output: Inception (2010).mkv (with correct capitalization and year)
+   
+   # For TV series
+   ./rip_tv.sh --title "breaking bad" --season 1 --output ~/TV
+   # Output: Breaking Bad - S01E01.mkv, Breaking Bad - S01E02.mkv, etc.
+   ```
+
+If metadata lookup is disabled or fails, the script falls back to using the disc title.
 
 ### Temporary Directory
 
