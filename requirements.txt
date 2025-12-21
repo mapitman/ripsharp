@@ -1,0 +1,17 @@
+# Python requirements for media-encoding
+# Install with: pip install -r requirements.txt
+
+# No required dependencies for basic functionality
+# The script uses only Python standard library modules
+
+# Optional dependencies for future enhancements:
+
+# For TMDB metadata lookup (if implementing)
+# tmdbsimple>=2.9.1
+
+# For TVDB metadata lookup (if implementing)
+# tvdb_v4_official>=1.0.0
+
+# For better CLI argument parsing and progress bars
+# tqdm>=4.65.0
+# colorama>=0.4.6
