@@ -68,11 +68,22 @@ class OnlineDiscIdentifier:
     
     def __init__(self, config: Optional[Dict] = None):
         self.config = config or {}
-        self.tmdb_api_key = self.config.get('metadata', {}).get('tmdb_api_key', '')
+        
+        # Read TMDB API key from environment variable first, fall back to config
+        self.tmdb_api_key = os.environ.get('TMDB_API_KEY', '')
+        
+        # If not in environment, try config file (for backward compatibility)
+        if not self.tmdb_api_key:
+            self.tmdb_api_key = self.config.get('metadata', {}).get('tmdb_api_key', '')
+            if self.tmdb_api_key:
+                logger.warning("Reading TMDB API key from config file. "
+                             "Consider using TMDB_API_KEY environment variable instead for better security.")
         
         if self.tmdb_api_key and TMDB_AVAILABLE:
             tmdb.API_KEY = self.tmdb_api_key
             logger.info("TMDB API configured for metadata lookup")
+        elif not self.tmdb_api_key and self.config.get('metadata', {}).get('lookup_enabled', True):
+            logger.info("TMDB API key not set. Set TMDB_API_KEY environment variable or add to config file.")
     
     def calculate_disc_id(self, disc_path: str) -> Optional[str]:
         """

@@ -57,7 +57,11 @@ Tools and scripts for ripping, encoding and organizing media files from DVDs, Bl
 5. **TMDB API Key** (Optional but recommended) - For online metadata lookup
    - Sign up for a free account at [TMDB](https://www.themoviedb.org/signup)
    - Get your API key at [TMDB API Settings](https://www.themoviedb.org/settings/api)
-   - Add it to your `config.yaml` file
+   - **Recommended:** Set it as an environment variable:
+     ```bash
+     export TMDB_API_KEY="your_api_key_here"
+     ```
+   - Alternative: Add it to your `config.yaml` file (less secure)
 
 ### Hardware Requirements
 
@@ -292,13 +296,28 @@ The script can automatically fetch movie and TV series metadata from TMDB (The M
    - Request an API key (choose "Developer" option)
    - Copy your API key
 
-2. **Configure the API Key:**
+2. **Configure the API Key (Recommended Method - Environment Variable):**
+   Set it as an environment variable for better security:
+   ```bash
+   # Linux/macOS - Add to ~/.bashrc or ~/.zshrc for persistence
+   export TMDB_API_KEY="your_api_key_here"
+   
+   # Windows (Command Prompt)
+   set TMDB_API_KEY=your_api_key_here
+   
+   # Windows (PowerShell)
+   $env:TMDB_API_KEY="your_api_key_here"
+   ```
+   
+   **Alternative Method - Config File (Less Secure):**
    Add it to your `config.yaml`:
    ```yaml
    metadata:
      lookup_enabled: true
      tmdb_api_key: "your_api_key_here"
    ```
+   
+   **Note:** The environment variable takes precedence over the config file. Using environment variables is more secure as they won't be accidentally committed to version control.
 
 3. **Features:**
    - Automatic movie title and year lookup

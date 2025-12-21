@@ -26,5 +26,9 @@ metadata:
   lookup_enabled: true
   
   # TMDB API key for movie and TV series metadata
+  # RECOMMENDED: Set via environment variable TMDB_API_KEY for better security
+  # Example: export TMDB_API_KEY="your_api_key_here"
+  # 
+  # Alternatively, you can set it here (not recommended for security):
   # Get your free API key at: https://www.themoviedb.org/settings/api
   tmdb_api_key: ""
