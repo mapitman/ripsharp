@@ -6,7 +6,6 @@ Includes online disc and metadata identification support.
 """
 
 import argparse
-import hashlib
 import json
 import logging
 import os
@@ -168,12 +167,21 @@ class OnlineDiscIdentifier:
                 movie = tmdb.Movies(result['id'])
                 info = movie.info()
                 
-                logger.info(f"Found movie on TMDB: {info.get('title')} ({info.get('release_date', '')[:4]})")
+                # Extract year from release_date safely
+                year = None
+                release_date = info.get('release_date', '')
+                if release_date and len(release_date) >= 4:
+                    try:
+                        year = int(release_date[:4])
+                    except ValueError:
+                        pass
+                
+                logger.info(f"Found movie on TMDB: {info.get('title')} ({year or 'Unknown'})")
                 
                 return {
                     'title': info.get('title'),
                     'original_title': info.get('original_title'),
-                    'year': int(info.get('release_date', '')[:4]) if info.get('release_date') else None,
+                    'year': year,
                     'overview': info.get('overview'),
                     'genres': [g['name'] for g in info.get('genres', [])],
                     'runtime': info.get('runtime'),
@@ -224,12 +232,21 @@ class OnlineDiscIdentifier:
                 tv = tmdb.TV(result['id'])
                 info = tv.info()
                 
-                logger.info(f"Found TV series on TMDB: {info.get('name')} ({info.get('first_air_date', '')[:4]})")
+                # Extract year from first_air_date safely
+                year = None
+                first_air_date = info.get('first_air_date', '')
+                if first_air_date and len(first_air_date) >= 4:
+                    try:
+                        year = int(first_air_date[:4])
+                    except ValueError:
+                        pass
+                
+                logger.info(f"Found TV series on TMDB: {info.get('name')} ({year or 'Unknown'})")
                 
                 return {
                     'title': info.get('name'),
                     'original_title': info.get('original_name'),
-                    'year': int(info.get('first_air_date', '')[:4]) if info.get('first_air_date') else None,
+                    'year': year,
                     'overview': info.get('overview'),
                     'genres': [g['name'] for g in info.get('genres', [])],
                     'number_of_seasons': info.get('number_of_seasons'),
