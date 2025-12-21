@@ -6,6 +6,7 @@ Includes online disc and metadata identification support.
 """
 
 import argparse
+import csv
 import json
 import logging
 import os
@@ -15,12 +16,61 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple
+import time
+import select
+import signal
+import fcntl
+import termios
+import struct
 
-# Configure logging
+# Configure logging with color support
+# Use period between seconds and milliseconds in timestamps
+class ColoredFormatter(logging.Formatter):
+    """Custom formatter that adds colors and emojis based on log level."""
+    
+    COLORS = {
+        'DEBUG': '\033[36m',    # Cyan
+        'INFO': '\033[32m',     # Green
+        'WARNING': '\033[33m',  # Yellow
+        'ERROR': '\033[31m',    # Red
+        'CRITICAL': '\033[41m', # Red background
+    }
+    RESET = '\033[0m'
+    
+    def format(self, record):
+        # Add emoji and color based on level
+        emoji_map = {
+            'DEBUG': '🔍',
+            'INFO': '✓',
+            'WARNING': '⚠️',
+            'ERROR': '❌',
+            'CRITICAL': '🔥',
+        }
+        emoji = emoji_map.get(record.levelname, '')
+        color = self.COLORS.get(record.levelname, '')
+        
+        # Create colored level name with emoji
+        colored_level = f"{color}{emoji} {record.levelname}{self.RESET}"
+        
+        # Format timestamp
+        timestamp = self.formatTime(record, '%Y-%m-%d %H:%M:%S')
+        ms = record.msecs
+        
+        # Build final message
+        message = record.getMessage()
+        return f"{timestamp}.{int(ms):03d} - {colored_level} - {message}"
+
+# Set up colored logger
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
+    format='%(message)s',  # We handle formatting in the formatter class
+    stream=sys.stdout,
 )
+
+# Replace the default formatter with our colored one
+handler = logging.getLogger().handlers[0]
+handler.setFormatter(ColoredFormatter())
+
 logger = logging.getLogger(__name__)
 
 try:
@@ -46,6 +96,31 @@ except ImportError:
     TMDB_AVAILABLE = False
     logger.info("tmdbsimple not installed. TMDB metadata lookup disabled. "
                 "Install with: pip install tmdbsimple")
+
+try:
+    from rich.progress import Progress, BarColumn, TextColumn, TimeRemainingColumn
+    from rich.console import Console
+    from rich.live import Live
+    RICH_AVAILABLE = True
+    logger.info("✓ Rich library loaded successfully")
+except ImportError as e:
+    RICH_AVAILABLE = False
+    logger.warning(f"Rich not available: {e}")
+
+try:
+    from colorama import init as colorama_init, Fore, Style
+    COLORAMA_AVAILABLE = True
+    colorama_init()
+except ImportError:
+    COLORAMA_AVAILABLE = False
+
+try:
+    import discid
+    DISCID_AVAILABLE = True
+except ImportError:
+    DISCID_AVAILABLE = False
+    logger.debug("discid library not available. Disc ID calculation disabled. "
+                 "Install with: pip install discid (requires libdiscid system library)")
 
 # Constants
 MIN_EPISODE_DURATION_SECONDS = 1200  # 20 minutes
@@ -99,16 +174,17 @@ class OnlineDiscIdentifier:
         Returns:
             Disc ID string or None if calculation fails
         """
+        if not DISCID_AVAILABLE:
+            logger.debug("discid library not available, skipping disc ID calculation. "
+                        "Install: pip install discid (requires libdiscid)")
+            return None
+        
         try:
-            # Try to use discid library if available
-            try:
-                import discid
-                disc = discid.read(disc_path)
-                logger.info(f"Calculated disc ID: {disc.id}")
-                return disc.id
-            except ImportError:
-                logger.debug("discid library not available, skipping disc ID calculation")
-                return None
+            import discid
+            disc = discid.read(disc_path)
+            logger.info(f"Calculated disc ID: {disc.id}")
+            logger.info(f"  First track: {disc.first_track_num}, Last track: {disc.last_track_num}")
+            return disc.id
         except Exception as e:
             logger.debug(f"Could not calculate disc ID: {e}")
             return None
@@ -284,15 +360,49 @@ class OnlineDiscIdentifier:
 class DiscRipper:
     """Handles disc ripping and encoding operations."""
     
-    def __init__(self, output_dir: str, temp_dir: str = "/tmp/makemkv", config: Optional[Dict] = None):
+    def __init__(self, output_dir: str, temp_dir: Optional[str] = None, config: Optional[Dict] = None):
         self.output_dir = Path(output_dir)
-        self.temp_dir = Path(temp_dir)
+        # Default temp dir within output if not provided
+        self.temp_dir = Path(temp_dir) if temp_dir else self.output_dir / ".makemkv"
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.temp_dir.mkdir(parents=True, exist_ok=True)
         self.config = config or {}
         
         # Initialize online disc identifier
         self.online_identifier = OnlineDiscIdentifier(self.config)
+
+    @staticmethod
+    def human_bytes(n: int) -> str:
+        """Return human-readable bytes (e.g., 12.3 GB)."""
+        try:
+            units = ['B', 'KB', 'MB', 'GB', 'TB']
+            size = float(n)
+            idx = 0
+            while size >= 1024 and idx < len(units) - 1:
+                size /= 1024.0
+                idx += 1
+            return f"{size:.1f} {units[idx]}"
+        except Exception:
+            return str(n)
+
+    def get_free_space_bytes(self, path: Path) -> int:
+        """Get free space available on the filesystem containing path."""
+        try:
+            usage = shutil.disk_usage(path)
+            return int(usage.free)
+        except Exception:
+            return 0
+
+    def estimate_required_space_bytes(self, disc_info: Dict, title_ids: List[int]) -> int:
+        """Estimate total bytes required to rip selected titles (raw MKV sizes)."""
+        titles = disc_info.get('titles', [])
+        id_set = set(str(t) for t in title_ids)
+        total = 0
+        for t in titles:
+            if str(t.get('id')) in id_set:
+                total += int(t.get('size', 0))
+        # Add 10% overhead for container and temp files
+        return int(total * 1.1)
     
     @staticmethod
     def load_config(config_path: str) -> Optional[Dict]:
@@ -350,7 +460,7 @@ class DiscRipper:
         Returns:
             Dictionary containing disc information or None if scan fails
         """
-        logger.info(f"Scanning disc at {disc_path}...")
+        logger.info(f"💿 Scanning disc at {disc_path}...")
         
         try:
             # Run makemkvcon info to get disc information
@@ -367,7 +477,7 @@ class DiscRipper:
             
             # Parse the output
             disc_info = self._parse_makemkv_info(result.stdout)
-            logger.info(f"Found {len(disc_info.get('titles', []))} titles on disc")
+            logger.info(f"📊 Found {len(disc_info.get('titles', []))} titles on disc")
             
             return disc_info
             
@@ -506,7 +616,7 @@ class DiscRipper:
             
             # Main movie should be at least 45 minutes
             if longest_title.get('duration', 0) >= MIN_MOVIE_DURATION_SECONDS:
-                logger.info(f"Identified main movie: Title {longest_title['id']} "
+                logger.info(f"🎬 Identified main movie: Title {longest_title['id']} "
                           f"({longest_title.get('duration', 0) // 60} minutes)")
                 return [int(longest_title['id'])]
             else:
@@ -514,7 +624,8 @@ class DiscRipper:
                 return []
     
     def rip_titles(self, disc_path: str, title_ids: List[int], 
-                   output_prefix: str = "title") -> List[Path]:
+                   output_prefix: str = "title",
+                   disc_info: Optional[Dict] = None) -> List[Path]:
         """
         Rip specified titles from disc.
         
@@ -529,46 +640,363 @@ class DiscRipper:
         ripped_files = []
         
         for title_id in title_ids:
-            logger.info(f"Ripping title {title_id}...")
-            
-            try:
-                # Use makemkvcon to rip the title
-                result = subprocess.run(
-                    ['makemkvcon', '-r', 'mkv', disc_path, str(title_id), 
-                     str(self.temp_dir)],
-                    capture_output=True,
-                    text=True,
-                    timeout=3600  # 1 hour timeout
+            # Log current free space before each title rip
+            free_temp = self.get_free_space_bytes(self.temp_dir)
+            free_out = self.get_free_space_bytes(self.output_dir)
+            logger.info(
+                f"💾 Free space - temp: {self.human_bytes(free_temp)}, output: {self.human_bytes(free_out)}"
+            )
+            # If we have disc_info, estimate title size
+            est_title_bytes = None
+            expected_file = None
+            expected_name = None
+            if disc_info:
+                try:
+                    t = next((x for x in disc_info.get('titles', []) if int(x.get('id', -1)) == int(title_id)), None)
+                    if t and t.get('size'):
+                        est_title_bytes = int(t.get('size'))
+                    # Build expected filename based on title name
+                    expected_name = t.get('name', '') if t else ''
+                    if expected_name:
+                        safe_name = FILENAME_SANITIZE_PATTERN.sub('', expected_name).strip()
+                        if safe_name:
+                            expected_file = self.temp_dir / f"{safe_name}_t{title_id:02d}.mkv"
+                except Exception:
+                    est_title_bytes = None
+            if est_title_bytes:
+                logger.info(f"📦 Estimated title {title_id} size: {self.human_bytes(est_title_bytes)}")
+            if est_title_bytes and free_temp < int(est_title_bytes * 1.05):
+                logger.warning(
+                    f"Temp space may be insufficient for title {title_id}: "
+                    f"required≈{self.human_bytes(int(est_title_bytes*1.05))}, free={self.human_bytes(free_temp)}"
                 )
-                
-                if result.returncode == 0:
+            progress_bar = None
+            console = None
+            if RICH_AVAILABLE:
+                import os
+                def _get_rows_cols():
+                    try:
+                        fd = os.open('/dev/tty', os.O_RDONLY)
+                        try:
+                            buf = struct.pack('hhhh', 0, 0, 0, 0)
+                            res = fcntl.ioctl(fd, termios.TIOCGWINSZ, buf)
+                            rows, cols, _, _ = struct.unpack('hhhh', res)
+                            if rows and cols:
+                                return int(rows), int(cols)
+                        finally:
+                            os.close(fd)
+                    except Exception:
+                        pass
+                    try:
+                        env_cols = int(os.environ.get('COLUMNS', '0'))
+                        env_rows = int(os.environ.get('LINES', '0'))
+                        if env_cols > 0 and env_rows > 0:
+                            return env_rows, env_cols
+                    except Exception:
+                        pass
+                    try:
+                        out = subprocess.run('stty size < /dev/tty', shell=True, capture_output=True, text=True)
+                        if out.returncode == 0 and out.stdout.strip():
+                            r, c = out.stdout.strip().split()
+                            return int(r), int(c)
+                    except Exception:
+                        pass
+                    return 24, 80
+
+                # Create Rich console for all output, write to /dev/tty to bypass tee
+                try:
+                    rows, cols = _get_rows_cols()
+                except Exception:
+                    rows, cols = (24, 80)
+
+                try:
+                    tty_file = open('/dev/tty', 'w')
+                    console = Console(file=tty_file, force_terminal=True, width=cols)
+                except Exception:
+                    console = Console(force_terminal=True, width=cols)
+                    tty_file = None
+
+                progress = Progress(
+                    TextColumn("[cyan]{task.description}"),
+                    BarColumn(bar_width=None),  # auto size to available width
+                    TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+                    expand=True,
+                )
+                task_id = progress.add_task(f"Title {title_id}", total=100)
+                live = Live(progress, console=console, refresh_per_second=10)
+                live.start()
+                progress_bar = progress
+
+
+
+            try:
+                # To avoid interactive overwrite prompts from MakeMKV, remove any existing
+                # temp files for this title before starting the rip.
+                try:
+                    to_delete_patterns = [
+                        f"*_t{title_id:02d}.mkv",
+                        f"title_t{title_id:02d}.mkv"
+                    ]
+                    for pattern in to_delete_patterns:
+                        for existing in self.temp_dir.glob(pattern):
+                            logger.debug(f"Removing existing temp file to avoid prompt: {existing}")
+                            try:
+                                existing.unlink()
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+
+                # Stream makemkvcon output to provide real-time progress
+                proc = subprocess.Popen(
+                    [
+                        'stdbuf', '-oL', '-eL', 'makemkvcon',
+                        '--messages=-stdout', '--progress=-stdout',
+                        '--cache=128',
+                        '-r', 'mkv',
+                        disc_path, str(title_id), str(self.temp_dir)
+                    ],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    stdin=subprocess.DEVNULL,
+                    text=True,
+                    bufsize=1
+                )
+
+                rip_start_ts = time.time()
+                last_pct_logged = -1
+                saving_phase = False
+                save_start_ts = None
+                last_mkv_size = 0
+                # If MakeMKV didn't provide an explicit size estimate, approximate from duration
+                # Assume average muxed bitrate ~ 2.5 MB/s (≈20 Mb/s) across video+audio
+                if est_title_bytes is None and disc_info:
+                    try:
+                        t = next((x for x in disc_info.get('titles', []) if int(x.get('id', -1)) == int(title_id)), None)
+                        dur = int(t.get('duration', 0)) if t else 0
+                        if dur > 0:
+                            est_title_bytes = int(dur * 2.5 * 1024 * 1024)
+                            # Use tqdm-aware logging to avoid interfering with the bar line
+                            write_log(f"📊 Estimated title {title_id} size (approx.): {self.human_bytes(est_title_bytes)}", 'info')
+                    except Exception:
+                        pass
+                # Helper to print logs using Rich console
+                def write_log(msg: str, level: str = 'info'):
+                    try:
+                        # Use the live console to print above the progress bar
+                        live.console.print(msg)
+                    except Exception:
+                        # Fallback to logger
+                        if level == 'info':
+                            logger.info(msg)
+                        elif level == 'warning':
+                            logger.warning(msg)
+                        elif level == 'error':
+                            logger.error(msg)
+                        else:
+                            logger.debug(msg)
+                while True:
+                    # Poll for output with a timeout to allow periodic progress updates
+                    ready, _, _ = select.select([proc.stdout], [], [], 0.25)
+                    if ready:
+                        line = proc.stdout.readline()
+                        if not line:
+                            if proc.poll() is not None:
+                                break
+                            # continue to fallback update below
+                        else:
+                            line = line.strip()
+
+                            # Progress lines from MakeMKV typically start with PRGV:<value>
+                            if line.startswith('PRGV:'):
+                                try:
+                                    raw = int(line.split(':', 1)[1])
+                                    # Heuristic scaling: MakeMKV progress often 0..100000
+                                    if raw >= 100000:
+                                        pct = raw / 1000.0
+                                    elif raw > 100:
+                                        pct = raw / 100.0
+                                    else:
+                                        pct = float(raw)
+
+                                    if pct > 100:
+                                        pct = 100.0
+                                    pct_int = int(pct)
+                                    if progress_bar and task_id is not None:
+                                        progress.update(task_id, completed=pct_int)
+                                    # Log progress for every 1% increment
+                                    if pct_int != last_pct_logged and pct_int % 1 == 0:
+                                        if COLORAMA_AVAILABLE:
+                                            write_log(f"{Fore.CYAN}Ripping title {title_id}: {pct_int}%{Style.RESET_ALL}", 'info')
+                                        else:
+                                            write_log(f"Ripping title {title_id}: {pct_int}%", 'info')
+                                        last_pct_logged = pct_int
+                                except Exception:
+                                    logger.debug(f"Could not parse progress line: {line}")
+                                    pass
+                            elif line.startswith('MSG:'):
+                                # Parse MakeMKV message and replace %1, %2 placeholders with provided parameters
+                                msg_text = self._parse_makemkv_msg(line)
+                                write_log(msg_text, 'info')
+                                # If MakeMKV reports space errors, add actual free space info
+                                low_space_markers = ('ENOSPC', 'No space', 'not enough space')
+                                if any(m in msg_text for m in low_space_markers):
+                                    free_temp = self.get_free_space_bytes(self.temp_dir)
+                                    free_out = self.get_free_space_bytes(self.output_dir)
+                                    write_log(
+                                        f"Space check -> temp: {self.human_bytes(free_temp)}, output: {self.human_bytes(free_out)}",
+                                        'warning'
+                                    )
+                            elif line.startswith('PRGC:'):
+                                # Progress caption, show as info and update bar description
+                                caption_match = re.search(r'"([^"]+)"', line)
+                                if caption_match:
+                                    caption_text = caption_match.group(1)
+                                    write_log(f"{caption_text}", 'info')
+                                    if progress_bar and task_id is not None:
+                                        # Show caption verbatim; saving descriptions are handled separately
+                                        progress.update(task_id, description=caption_text)
+                                    if 'Saving to MKV file' in caption_text or 'Saving' in caption_text:
+                                        saving_phase = True
+                                        save_start_ts = time.time()
+                            else:
+                                # Filter out robot mode protocol lines (PRGT, DRV, TCOUNT, CINFO, SINFO, etc.)
+                                robot_prefixes = ('PRGT:', 'DRV:', 'TCOUNT:', 'CINFO:', 'SINFO:', 'TINFO:', 'STRACK:', 'ATRACK:', 'VTRACK:')
+                                if not line.startswith(robot_prefixes):
+                                    # All other MakeMKV output—route through Rich if available
+                                    if live:
+                                        live.console.print(line)
+                                    else:
+                                        logger.debug(line)
+
+                    # Fallback progress update based on growing MKV file size
+                    if progress_bar:
+                        try:
+                            mkv_candidates = []
+                            if expected_file and expected_file.exists():
+                                mkv_candidates = [expected_file]
+                            if not mkv_candidates:
+                                mkv_candidates = list(self.temp_dir.glob(f"*_t{title_id:02d}.mkv"))
+                            if not mkv_candidates:
+                                mkv_candidates = list(self.temp_dir.glob(f"title_t{title_id:02d}.mkv"))
+                            # Include common temporary file patterns that MakeMKV might use
+                            if not mkv_candidates:
+                                tmp_patterns = ["*.mkv.tmp", "*.mkv.part", "*.tmp", "*.partial"]
+                                for pat in tmp_patterns:
+                                    mkv_candidates.extend(list(self.temp_dir.glob(pat)))
+                            # If specific patterns not found, pick newest MKV created since rip or save start
+                            if not mkv_candidates:
+                                threshold_ts = save_start_ts or rip_start_ts
+                                mkv_candidates = [
+                                    p for p in self.temp_dir.glob("*.mkv")
+                                    if p.stat().st_mtime >= (threshold_ts - 1)
+                                ]
+                                mkv_candidates.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+
+                            # Update progress bar based on file size during saving phase
+                            if mkv_candidates:
+                                current_size = mkv_candidates[0].stat().st_size
+                                if est_title_bytes and est_title_bytes > 0:
+                                    pct_guess = int((current_size / est_title_bytes) * 100)
+                                    if pct_guess > 100:
+                                        pct_guess = 100
+                                    # During saving phase, always update bar based on file size (trust the estimate)
+                                    # Otherwise only update if percentage increased (reading phase)
+                                    last_completed = getattr(progress, '_last_completed', 0) if progress_bar else 0
+                                    if saving_phase or pct_guess > last_completed:
+                                        if progress_bar and task_id is not None:
+                                            progress.update(task_id, completed=pct_guess)
+                                            if hasattr(progress, '_last_completed'):
+                                                progress._last_completed = pct_guess
+                                            else:
+                                                progress._last_completed = pct_guess
+                                            # Update bar description to show byte counts during saving
+                                            if saving_phase and current_size != last_mkv_size:
+                                                current_h = self.human_bytes(current_size)
+                                                total_h = self.human_bytes(est_title_bytes)
+                                                target_name = mkv_candidates[0].name if mkv_candidates else f"title_{title_id:02d}.mkv"
+                                                progress.update(task_id, description=f"Saving Title {title_id} to {target_name} ({current_h}/{total_h})")
+                                                last_mkv_size = current_size
+                                        if pct_guess != last_pct_logged and pct_guess % 1 == 0:
+                                            last_pct_logged = pct_guess
+                                else:
+                                    # No estimate available; keep bar active at 99% but show size growth in desc
+                                    last_completed = getattr(progress, '_last_completed', 0) if progress_bar else 0
+                                    if last_completed < 99:
+                                        if progress_bar and task_id is not None:
+                                            progress.update(task_id, completed=99)
+                                            progress._last_completed = 99
+                                            if saving_phase and current_size != last_mkv_size:
+                                                current_h = self.human_bytes(current_size)
+                                                target_name = mkv_candidates[0].name if mkv_candidates else f"title_{title_id:02d}.mkv"
+                                                progress.update(task_id, description=f"Saving Title {title_id} to {target_name} ({current_h})")
+                                                last_mkv_size = current_size
+                            else:
+                                # No file detected yet; keep gentle activity
+                                last_completed = getattr(progress, '_last_completed', 0) if progress_bar else 0
+                                if progress_bar and task_id is not None and last_completed < 99:
+                                    progress.update(task_id, completed=min(99, last_completed + 1))
+                                    progress._last_completed = min(99, last_completed + 1)
+                        except Exception:
+                            pass
+
+                return_code = proc.wait()
+                if progress_bar and task_id is not None:
+                    progress.update(task_id, completed=100)
+                    live.stop()
+                    if tty_file:
+                        tty_file.close()
+                    # Restore previous SIGWINCH handler
+                    try:
+                        if prev_sigwinch is not None:
+                            signal.signal(signal.SIGWINCH, prev_sigwinch)
+                    except Exception:
+                        pass
+
+                if return_code == 0:
                     # Find the created file
                     mkv_files = list(self.temp_dir.glob(f"*_t{title_id:02d}.mkv"))
                     if not mkv_files:
-                        # Try alternative pattern
                         mkv_files = list(self.temp_dir.glob(f"title_t{title_id:02d}.mkv"))
                     if not mkv_files:
-                        # List all new mkv files
-                        mkv_files = sorted(self.temp_dir.glob("*.mkv"), 
-                                         key=lambda p: p.stat().st_mtime)
+                        mkv_files = sorted(self.temp_dir.glob("*.mkv"), key=lambda p: p.stat().st_mtime)
                         if mkv_files:
-                            mkv_files = [mkv_files[-1]]  # Take the most recent
-                    
+                            mkv_files = [mkv_files[-1]]
+
                     if mkv_files:
                         ripped_file = mkv_files[0]
-                        logger.info(f"Successfully ripped to {ripped_file}")
+                        logger.info(f"✅ Successfully ripped to {ripped_file}")
                         ripped_files.append(ripped_file)
                     else:
                         logger.error(f"Could not find ripped file for title {title_id}")
                 else:
-                    logger.error(f"Failed to rip title {title_id}: {result.stderr}")
-                    
-            except subprocess.TimeoutExpired:
-                logger.error(f"Ripping title {title_id} timed out")
+                    logger.error(f"Failed to rip title {title_id} (exit code {return_code})")
+
             except Exception as e:
                 logger.error(f"Error ripping title {title_id}: {e}")
         
         return ripped_files
+
+    def _parse_makemkv_msg(self, line: str) -> str:
+        """Parse a MakeMKV MSG: line, replacing %1, %2 placeholders.
+
+        Example: MSG:3020,2,0,"Saving title %1 of %2",1,20 -> "Saving title 1 of 20"
+        """
+        try:
+            # Strip leading 'MSG:'
+            payload = line[4:] if line.startswith('MSG:') else line
+            # Use CSV reader to handle quoted fields and commas
+            fields = next(csv.reader([payload], escapechar='\\'))
+            if len(fields) < 4:
+                return line
+            text = fields[3]
+            params = fields[4:]
+            # Replace %1..%n with params
+            for idx, val in enumerate(params, start=1):
+                text = text.replace(f"%{idx}", val)
+            return text
+        except Exception:
+            return line
     
     def analyze_file(self, file_path: Path) -> Optional[Dict]:
         """Analyze media file to get track information."""
@@ -793,6 +1221,21 @@ class DiscRipper:
             logger.error(f"Failed to rename file: {e}")
             return file_path
     
+    def extract_title_from_filename(self, file_path: Path) -> Optional[str]:
+        """Extract title from MKV filename (e.g., 'Misery_t00.mkv' -> 'Misery')."""
+        try:
+            name = file_path.stem  # Remove .mkv extension
+            # MakeMKV format: TitleName_t##.mkv or similar
+            # Extract everything before the underscore and title index
+            match = re.match(r'^(.+?)(?:_t\d+)?$', name)
+            if match:
+                title = match.group(1).strip()
+                if title and title not in ('Unknown', ''):
+                    return title
+        except Exception:
+            pass
+        return None
+
     def process_disc(self, disc_path: str = "disc:0", is_tv_series: bool = False,
                     title: Optional[str] = None, year: Optional[int] = None,
                     season_num: int = 1) -> List[Path]:
@@ -829,13 +1272,24 @@ class DiscRipper:
             logger.error("No suitable titles found on disc")
             return []
         
-        # Rip titles
-        ripped_files = self.rip_titles(disc_path, title_ids)
+        # Rip titles (provide disc_info for better diagnostics)
+        ripped_files = self.rip_titles(disc_path, title_ids, disc_info=disc_info)
         if not ripped_files:
-            logger.error("Failed to rip any titles")
+            logger.error("❌ Failed to rip any titles")
             return []
         
-        # Look up metadata (pass disc_path for disc identification)
+        # Extract title from ripped filename if we don't have a good one yet
+        # (MakeMKV often has better title info than disc name)
+        if title in ('Unknown', disc_info.get('disc_name', 'Unknown')) and ripped_files:
+            extracted_title = self.extract_title_from_filename(ripped_files[0])
+            if extracted_title:
+                logger.info(f"Using title from filename: {extracted_title}")
+                title = extracted_title
+        
+        # Look up metadata (pass disc_info with disc_id for better identification)
+        disc_id = disc_info.get('disc_id', '')
+        if disc_id:
+            logger.info(f"Using disc ID for metadata lookup: {disc_id}")
         metadata = self.lookup_metadata(title, is_tv_series, year, disc_path)
         if not metadata:
             metadata = {'title': title, 'year': year, 
@@ -905,8 +1359,7 @@ def main():
     
     parser.add_argument(
         '--temp',
-        default='/tmp/makemkv',
-        help='Temporary directory for ripping (default: /tmp/makemkv)'
+        help='Temporary directory for ripping (default: OUTPUT_DIR/.makemkv)'
     )
     
     parser.add_argument(
@@ -982,4 +1435,11 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        try:
+            logger.info("🛑 Rip cancelled by user (Ctrl+C). Exiting cleanly.")
+        except Exception:
+            print("Rip cancelled by user (Ctrl+C). Exiting cleanly.")
+        sys.exit(130)
