@@ -48,9 +48,15 @@ class ColoredFormatter(logging.Formatter):
         }
         emoji = emoji_map.get(record.levelname, '')
         color = self.COLORS.get(record.levelname, '')
+
+        # Map Python level names to desired display labels
+        level_label_map = {
+            'WARNING': 'WARN',
+        }
+        display_level = level_label_map.get(record.levelname, record.levelname)
         
         # Create colored level name with emoji
-        colored_level = f"{color}{emoji} {record.levelname}{self.RESET}"
+        colored_level = f"{color}{emoji} {display_level}{self.RESET}"
         
         # Format timestamp
         timestamp = self.formatTime(record, '%Y-%m-%d %H:%M:%S')
@@ -94,15 +100,14 @@ try:
     TMDB_AVAILABLE = True
 except ImportError:
     TMDB_AVAILABLE = False
-    logger.info("tmdbsimple not installed. TMDB metadata lookup disabled. "
-                "Install with: pip install tmdbsimple")
+    logger.warning("tmdbsimple not installed. TMDB metadata lookup disabled. "
+                   "Install with: pip install tmdbsimple")
 
 try:
     from rich.progress import Progress, BarColumn, TextColumn, TimeRemainingColumn
     from rich.console import Console
     from rich.live import Live
     RICH_AVAILABLE = True
-    logger.info("✓ Rich library loaded successfully")
 except ImportError as e:
     RICH_AVAILABLE = False
     logger.warning(f"Rich not available: {e}")
@@ -112,7 +117,8 @@ try:
     FFMPEG_PROGRESS_AVAILABLE = True
 except ImportError:
     FFMPEG_PROGRESS_AVAILABLE = False
-    logger.debug("ffmpeg-progress-yield not available; FFmpeg encoding progress disabled")
+    logger.warning("ffmpeg-progress-yield not installed. FFmpeg encoding progress disabled. "
+                   "Install with: pip install ffmpeg-progress-yield")
 
 try:
     from colorama import init as colorama_init, Fore, Style
@@ -130,9 +136,15 @@ except ImportError:
                  "Install with: pip install discid (requires libdiscid system library)")
 
 # Constants
-MIN_EPISODE_DURATION_SECONDS = 1200  # 20 minutes
+# Default mux rate fallbacks (bytes per second)
+DEFAULT_BPS_SD = 1.1 * 1024 * 1024    # ~9 Mb/s, conservative for DVD
+DEFAULT_BPS_BD = 4.5 * 1024 * 1024    # ~36 Mb/s, typical for Blu-ray main feature (movies)
+DEFAULT_BPS_BD_TV = 4.3 * 1024 * 1024 # ~34 Mb/s, typical for Blu-ray TV episodes
+DEFAULT_BPS_UHD = 6.5 * 1024 * 1024   # ~52 Mb/s, conservative for UHD/4K
+MIN_EPISODE_DURATION_SECONDS = 1200  # 20 minutes (includes TV specials)
 MAX_EPISODE_DURATION_SECONDS = 3600  # 60 minutes
 MIN_MOVIE_DURATION_SECONDS = 2700    # 45 minutes
+MIN_SPECIAL_DURATION_SECONDS = 1200  # 20 minutes (for TV specials)
 MIN_EPISODE_CHAPTERS = 1              # Minimum chapters to consider as episode
 
 # Regex pattern for sanitizing filenames
@@ -160,13 +172,26 @@ class OnlineDiscIdentifier:
             if self.tmdb_api_key:
                 logger.warning("Reading TMDB API key from config file. "
                              "Consider using TMDB_API_KEY environment variable instead for better security.")
-        
+
+        # Read OMDB API key from environment variable first, fall back to config
+        self.omdb_api_key = os.environ.get('OMDB_API_KEY', '')
+        if not self.omdb_api_key:
+            self.omdb_api_key = self.config.get('metadata', {}).get('omdb_api_key', '')
+            if self.omdb_api_key:
+                logger.warning("Reading OMDB API key from config file. "
+                             "Consider using OMDB_API_KEY environment variable instead for better security.")
+
         # Check if metadata lookup is enabled
         lookup_enabled = self.config.get('metadata', {}).get('lookup_enabled', True)
-        
+
+        if self.omdb_api_key and REQUESTS_AVAILABLE:
+            logger.info("OMDB API configured for metadata lookup")
+        elif not self.omdb_api_key and lookup_enabled:
+            logger.info("OMDB API key not set. Set OMDB_API_KEY environment variable or add to config file.")
+
         if self.tmdb_api_key and TMDB_AVAILABLE:
             tmdb.API_KEY = self.tmdb_api_key
-            logger.info("TMDB API configured for metadata lookup")
+            logger.info("TMDB API configured for metadata lookup (fallback)")
         elif not self.tmdb_api_key and lookup_enabled:
             logger.info("TMDB API key not set. Set TMDB_API_KEY environment variable or add to config file.")
     
@@ -209,6 +234,77 @@ class OnlineDiscIdentifier:
         """
         if not REQUESTS_AVAILABLE:
             return None
+
+    @staticmethod
+    def _normalize_title(s: str) -> str:
+        try:
+            s = s or ""
+            s = s.lower().strip()
+            # Remove leading articles
+            for art in ("the ", "a ", "an "):
+                if s.startswith(art):
+                    s = s[len(art):]
+                    break
+            # Remove punctuation
+            s = re.sub(r"[^a-z0-9\s]", "", s)
+            # Collapse whitespace
+            s = re.sub(r"\s+", " ", s).strip()
+            return s
+        except Exception:
+            return s or ""
+
+    def _title_similarity(self, a: str, b: str) -> float:
+        try:
+            na = self._normalize_title(a)
+            nb = self._normalize_title(b)
+            import difflib
+            return float(difflib.SequenceMatcher(None, na, nb).ratio())
+        except Exception:
+            return 0.0
+
+    def _prompt_user_choice(self, candidates: List[Dict], query_title: str) -> Optional[Dict]:
+        """If interactive, prompt user to pick a candidate; otherwise return best."""
+        if not sys.stdin.isatty():
+            return candidates[0] if candidates else None
+
+        try:
+            print("\nMultiple matches found. Select the correct title (or press Enter for best match):")
+            for idx, c in enumerate(candidates, start=1):
+                year = c.get('year') or 'Unknown'
+                score = c.get('score')
+                src = c.get('source', 'unknown')
+                print(f"  {idx}) {c.get('title')} ({year}) [source: {src}, score: {score:.2f}]")
+            choice = input(f"Choice [1-{len(candidates)} or Enter]: ").strip()
+            if not choice:
+                return candidates[0]
+            try:
+                sel = int(choice)
+                if 1 <= sel <= len(candidates):
+                    return candidates[sel - 1]
+            except ValueError:
+                pass
+            print("Invalid selection; using best match.")
+            return candidates[0]
+        except Exception:
+            return candidates[0] if candidates else None
+
+    def _fetch_omdb_by_id(self, imdb_id: str) -> Optional[Dict]:
+        if not REQUESTS_AVAILABLE or not self.omdb_api_key:
+            return None
+        try:
+            params = {
+                'apikey': self.omdb_api_key,
+                'i': imdb_id,
+                'plot': 'short'
+            }
+            response = requests.get('http://www.omdbapi.com/', params=params, timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('Response') == 'True':
+                    return data
+            return None
+        except Exception:
+            return None
         
         try:
             headers = {
@@ -230,6 +326,201 @@ class OnlineDiscIdentifier:
                 
         except Exception as e:
             logger.debug(f"MusicBrainz lookup failed: {e}")
+            return None
+
+    def search_omdb_movie(self, title: str, year: Optional[int] = None) -> Optional[Dict]:
+        """
+        Search for movie metadata on OMDB. Returns best match, prompting user if multiple.
+        """
+        if not REQUESTS_AVAILABLE or not self.omdb_api_key:
+            return None
+
+        try:
+            params = {
+                'apikey': self.omdb_api_key,
+                's': title,
+                'type': 'movie'
+            }
+            if year:
+                params['y'] = str(year)
+
+            response = requests.get('http://www.omdbapi.com/', params=params, timeout=10)
+
+            candidates: List[Dict] = []
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('Response') == 'True' and data.get('Search'):
+                    for r in data['Search']:
+                        cand_title = r.get('Title', '')
+                        cand_year = None
+                        ys = r.get('Year', '')
+                        if ys and len(ys) >= 4:
+                            try:
+                                cand_year = int(ys[:4])
+                            except ValueError:
+                                pass
+                        score = self._title_similarity(cand_title, title)
+                        if year and cand_year and cand_year == year:
+                            score += 0.2
+                        candidates.append({
+                            'title': cand_title,
+                            'year': cand_year,
+                            'id': r.get('imdbID'),
+                            'source': 'omdb',
+                            'score': score
+                        })
+
+            if not candidates:
+                return None
+
+            candidates.sort(key=lambda c: c.get('score', 0), reverse=True)
+            if len(candidates) > 1:
+                chosen = self._prompt_user_choice(candidates, title)
+            else:
+                chosen = candidates[0]
+
+            if not chosen:
+                return None
+
+            detail = self._fetch_omdb_by_id(chosen.get('id'))
+            if not detail or detail.get('Response') != 'True':
+                return None
+
+            result_year = None
+            year_str = detail.get('Year', '')
+            if year_str and len(year_str) >= 4:
+                try:
+                    result_year = int(year_str[:4])
+                except ValueError:
+                    pass
+
+            logger.info(f"Found movie on OMDB: {detail.get('Title')} ({result_year or 'Unknown'})")
+
+            return {
+                'title': detail.get('Title'),
+                'year': result_year,
+                'overview': detail.get('Plot'),
+                'genres': detail.get('Genre', '').split(', ') if detail.get('Genre') else [],
+                'runtime': detail.get('Runtime'),
+                'imdb_id': detail.get('imdbID'),
+                'poster_path': detail.get('Poster'),
+                'vote_average': float(detail.get('imdbRating', 0)) if detail.get('imdbRating', 'N/A') != 'N/A' else None,
+                'type': 'movie'
+            }
+
+        except Exception as e:
+            logger.warning(f"OMDB movie search failed: {e}")
+            return None
+
+    def search_omdb_tv(self, title: str, year: Optional[int] = None) -> Optional[Dict]:
+        """
+        Search for TV series/specials metadata on OMDB. Returns best match, prompting user if multiple.
+        Searches both series and movies (for TV specials).
+        """
+        if not REQUESTS_AVAILABLE or not self.omdb_api_key:
+            return None
+
+        try:
+            candidates: List[Dict] = []
+            
+            # Search for series first
+            params = {
+                'apikey': self.omdb_api_key,
+                's': title,
+                'type': 'series'
+            }
+            if year:
+                params['y'] = str(year)
+
+            response = requests.get('http://www.omdbapi.com/', params=params, timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('Response') == 'True' and data.get('Search'):
+                    for r in data['Search']:
+                        cand_title = r.get('Title', '')
+                        cand_year = None
+                        ys = r.get('Year', '')
+                        if ys and len(ys) >= 4:
+                            try:
+                                cand_year = int(ys[:4])
+                            except ValueError:
+                                pass
+                        score = self._title_similarity(cand_title, title)
+                        if year and cand_year and cand_year == year:
+                            score += 0.2
+                        candidates.append({
+                            'title': cand_title,
+                            'year': cand_year,
+                            'id': r.get('imdbID'),
+                            'source': 'omdb',
+                            'score': score
+                        })
+            
+            # Also search movies (for TV specials)
+            params['type'] = 'movie'
+            response = requests.get('http://www.omdbapi.com/', params=params, timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('Response') == 'True' and data.get('Search'):
+                    for r in data['Search']:
+                        cand_title = r.get('Title', '')
+                        cand_year = None
+                        ys = r.get('Year', '')
+                        if ys and len(ys) >= 4:
+                            try:
+                                cand_year = int(ys[:4])
+                            except ValueError:
+                                pass
+                        score = self._title_similarity(cand_title, title)
+                        if year and cand_year and cand_year == year:
+                            score += 0.2
+                        candidates.append({
+                            'title': cand_title,
+                            'year': cand_year,
+                            'id': r.get('imdbID'),
+                            'source': 'omdb',
+                            'score': score
+                        })
+
+            if not candidates:
+                return None
+
+            candidates.sort(key=lambda c: c.get('score', 0), reverse=True)
+            if len(candidates) > 1:
+                chosen = self._prompt_user_choice(candidates, title)
+            else:
+                chosen = candidates[0]
+
+            if not chosen:
+                return None
+
+            detail = self._fetch_omdb_by_id(chosen.get('id'))
+            if not detail or detail.get('Response') != 'True':
+                return None
+
+            result_year = None
+            year_str = detail.get('Year', '')
+            if year_str and len(year_str) >= 4:
+                try:
+                    result_year = int(year_str[:4])
+                except ValueError:
+                    pass
+
+            logger.info(f"Found TV series on OMDB: {detail.get('Title')} ({result_year or 'Unknown'})")
+
+            return {
+                'title': detail.get('Title'),
+                'year': result_year,
+                'overview': detail.get('Plot'),
+                'genres': detail.get('Genre', '').split(', ') if detail.get('Genre') else [],
+                'imdb_id': detail.get('imdbID'),
+                'poster_path': detail.get('Poster'),
+                'vote_average': float(detail.get('imdbRating', 0)) if detail.get('imdbRating', 'N/A') != 'N/A' else None,
+                'type': 'tv'
+            }
+
+        except Exception as e:
+            logger.warning(f"OMDB TV search failed: {e}")
             return None
     
     def search_tmdb_movie(self, title: str, year: Optional[int] = None) -> Optional[Dict]:
@@ -257,11 +548,39 @@ class OnlineDiscIdentifier:
                 response = search.movie(query=title)
             
             if search.results:
-                # Get the first (best) match
-                result = search.results[0]
-                
-                # Get detailed information
-                movie = tmdb.Movies(result['id'])
+                # Build candidate list with scores
+                candidates = []
+                for r in search.results:
+                    cand = r.get('title') or r.get('original_title') or ''
+                    score = self._title_similarity(cand, title)
+                    if year:
+                        try:
+                            rd = r.get('release_date', '')
+                            if rd and len(rd) >= 4 and int(rd[:4]) == int(year):
+                                score += 0.2
+                        except Exception:
+                            pass
+                    candidates.append({
+                        'title': cand,
+                        'year': int(r.get('release_date', '')[:4]) if r.get('release_date') else None,
+                        'id': r.get('id'),
+                        'source': 'tmdb',
+                        'score': score
+                    })
+
+                if not candidates:
+                    return None
+
+                candidates.sort(key=lambda c: c.get('score', 0), reverse=True)
+                if candidates[0].get('score', 0) < 0.55:
+                    logger.warning(f"TMDB movie search: low-confidence match for '{title}' (score={candidates[0].get('score',0):.2f}). Using fallback.")
+                    return None
+
+                chosen = candidates[0] if len(candidates) == 1 else self._prompt_user_choice(candidates, title)
+                if not chosen:
+                    return None
+
+                movie = tmdb.Movies(chosen['id'])
                 info = movie.info()
                 
                 # Extract year from release_date safely
@@ -273,7 +592,7 @@ class OnlineDiscIdentifier:
                     except ValueError:
                         pass
                 
-                logger.info(f"Found movie on TMDB: {info.get('title')} ({year or 'Unknown'})")
+                logger.info(f"Found movie on TMDB: {info.get('title')} ({year or 'Unknown'}), confidence {chosen.get('score',0):.2f}")
                 
                 return {
                     'title': info.get('title'),
@@ -322,11 +641,38 @@ class OnlineDiscIdentifier:
                 response = search.tv(query=title)
             
             if search.results:
-                # Get the first (best) match
-                result = search.results[0]
-                
-                # Get detailed information
-                tv = tmdb.TV(result['id'])
+                candidates = []
+                for r in search.results:
+                    cand = r.get('name') or r.get('original_name') or ''
+                    score = self._title_similarity(cand, title)
+                    if year:
+                        try:
+                            fd = r.get('first_air_date', '')
+                            if fd and len(fd) >= 4 and int(fd[:4]) == int(year):
+                                score += 0.2
+                        except Exception:
+                            pass
+                    candidates.append({
+                        'title': cand,
+                        'year': int(r.get('first_air_date', '')[:4]) if r.get('first_air_date') else None,
+                        'id': r.get('id'),
+                        'source': 'tmdb',
+                        'score': score
+                    })
+
+                if not candidates:
+                    return None
+
+                candidates.sort(key=lambda c: c.get('score', 0), reverse=True)
+                if candidates[0].get('score', 0) < 0.55:
+                    logger.warning(f"TMDB TV search: low-confidence match for '{title}' (score={candidates[0].get('score',0):.2f}). Using fallback.")
+                    return None
+
+                chosen = candidates[0] if len(candidates) == 1 else self._prompt_user_choice(candidates, title)
+                if not chosen:
+                    return None
+
+                tv = tmdb.TV(chosen['id'])
                 info = tv.info()
                 
                 # Extract year from first_air_date safely
@@ -338,7 +684,7 @@ class OnlineDiscIdentifier:
                     except ValueError:
                         pass
                 
-                logger.info(f"Found TV series on TMDB: {info.get('name')} ({year or 'Unknown'})")
+                logger.info(f"Found TV series on TMDB: {info.get('name')} ({year or 'Unknown'}), confidence {chosen.get('score',0):.2f}")
                 
                 return {
                     'title': info.get('name'),
@@ -374,9 +720,70 @@ class DiscRipper:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.temp_dir.mkdir(parents=True, exist_ok=True)
         self.config = config or {}
-        
+        # Disc-level average bytes-per-second estimate (computed after scan)
+        self.disc_bps_estimate: Optional[float] = None
+        self.disc_type: Optional[str] = None  # 'dvd' or 'bd'
         # Initialize online disc identifier
         self.online_identifier = OnlineDiscIdentifier(self.config)
+
+    def _default_bps_fallback(self) -> float:
+        # Choose fallback BPS based on inferred disc type
+        if self.disc_type == 'dvd':
+            return DEFAULT_BPS_SD
+        if self.disc_type == 'bd':
+            # Use a slightly lower typical mux rate for TV episodes
+            if getattr(self, 'is_tv_series', False):
+                return DEFAULT_BPS_BD_TV
+            return DEFAULT_BPS_BD
+        if self.disc_type == 'uhd':
+            return DEFAULT_BPS_UHD
+        # Unknown type: default to SD to avoid overestimation
+        return DEFAULT_BPS_SD
+
+    @staticmethod
+    def _normalize_disc_type(raw: Optional[str]) -> Optional[str]:
+        if not raw:
+            return None
+        val = raw.strip().lower()
+        if not val:
+            return None
+        # Common DVD markers
+        dvd_markers = ('dvd', 'dvd-rom', 'dvdrom')
+        if any(m in val for m in dvd_markers):
+            return 'dvd'
+        # UHD / 4K markers
+        uhd_markers = ('uhd', 'ultra hd', 'ultrahd', '4k')
+        if any(m in val for m in uhd_markers):
+            return 'uhd'
+        # Blu-ray markers
+        bd_markers = ('bd', 'blu-ray', 'bluray', 'bd-rom', 'bdrom', 'bd25', 'bd50')
+        if any(m in val for m in bd_markers):
+            return 'bd'
+        return None
+
+    def _infer_disc_type_from_info(self, disc_info: Dict) -> Optional[str]:
+        # First, try raw disc type from CINFO:0
+        normalized = self._normalize_disc_type(disc_info.get('disc_type_raw'))
+        if normalized:
+            return normalized
+        # Next, try already-set disc_type field (if any)
+        if disc_info.get('disc_type'):
+            normalized = self._normalize_disc_type(disc_info.get('disc_type'))
+            if normalized:
+                return normalized
+        # Infer from total known title sizes
+        total_size = 0
+        for t in disc_info.get('titles', []):
+            try:
+                total_size += int(t.get('size', 0) or 0)
+            except Exception:
+                pass
+        if total_size > 0:
+            # DVDs typically <= ~8.5 GiB, Blu-ray commonly larger
+            if total_size <= (12 * 1024 * 1024 * 1024):
+                return 'dvd'
+            return 'bd'
+        return None
 
     @staticmethod
     def human_bytes(n: int) -> str:
@@ -407,9 +814,114 @@ class DiscRipper:
         total = 0
         for t in titles:
             if str(t.get('id')) in id_set:
-                total += int(t.get('size', 0))
+                sz = t.get('size', 0)
+                if sz:
+                    try:
+                        total += int(sz)
+                        continue
+                    except Exception:
+                        pass
+                    # Fallback: estimate from duration using disc-level BPS if available
+                    dur = int(t.get('duration', 0))
+                    if dur > 0:
+                        bps = self.disc_bps_estimate if self.disc_bps_estimate else self._default_bps_fallback()
+                        total += int(dur * bps)
         # Add 10% overhead for container and temp files
         return int(total * 1.1)
+
+    def estimate_encoded_output_bytes(self, file_info: Dict, metadata: Optional[Dict] = None) -> Optional[int]:
+        """Estimate encoded output size based on resolution, audio bitrates, and duration.
+
+        Produces a mid-point estimate from a low/high bitrate range per resolution,
+        with an animation adjustment when metadata indicates Animation genre.
+        """
+        try:
+            streams = file_info.get('streams', []) or []
+            fmt = file_info.get('format', {})
+            try:
+                duration = float(fmt.get('duration')) if fmt.get('duration') else None
+            except Exception:
+                duration = None
+            if not duration:
+                # fallback: video stream duration if present
+                for s in streams:
+                    if s.get('codec_type') == 'video' and s.get('duration'):
+                        try:
+                            duration = float(s.get('duration'))
+                            break
+                        except Exception:
+                            pass
+            if not duration or duration <= 0:
+                return None
+
+            # Highest resolution video stream
+            video_streams = [s for s in streams if s.get('codec_type') == 'video']
+            video_streams.sort(key=lambda s: (s.get('width', 0) * s.get('height', 0)), reverse=True)
+            if video_streams:
+                vw = int(video_streams[0].get('width', 0) or 0)
+                vh = int(video_streams[0].get('height', 0) or 0)
+                pixels = vw * vh
+            else:
+                vw, vh, pixels = (0, 0, 0)
+
+            # Resolution bracket low/high kbps
+            if pixels <= (720 * 576):  # SD
+                v_low, v_high = 900, 1800
+            elif pixels <= (1280 * 720):  # 720p
+                v_low, v_high = 2500, 4500
+            elif pixels <= (1920 * 1080):  # 1080p
+                v_low, v_high = 4000, 7000
+            else:  # >1080p
+                v_low, v_high = 8000, 12000
+
+            # Animation adjustment from metadata
+            is_animation = False
+            try:
+                genres = (metadata or {}).get('genres') or []
+                if isinstance(genres, list) and any(g.lower() == 'animation' for g in genres if isinstance(g, str)):
+                    is_animation = True
+            except Exception:
+                pass
+            if is_animation:
+                v_low = int(v_low * 0.7)
+                v_high = int(v_high * 0.7)
+
+            # Audio: mirror selection logic (English or unspecified; stereo or surround)
+            a_kbps_total = 0
+            for s in streams:
+                if s.get('codec_type') != 'audio':
+                    continue
+                lang = (s.get('tags', {}) or {}).get('language', '')
+                if lang not in ('eng', 'en', ''):
+                    continue
+                ch = int(s.get('channels', 0) or 0)
+                if ch == 2 or ch >= 6:
+                    # Prefer explicit bit_rate if available
+                    br = s.get('bit_rate')
+                    kbps = None
+                    if br:
+                        try:
+                            kbps = int(br) / 1000.0
+                        except Exception:
+                            kbps = None
+                    if kbps is None:
+                        kbps = 160 if ch == 2 else 448
+                    a_kbps_total += int(kbps)
+
+            # Low/mid/high total kbps
+            total_low = v_low + a_kbps_total
+            total_high = v_high + a_kbps_total
+            total_mid = int((total_low + total_high) / 2)
+
+            # Size in bytes
+            bytes_low = int((total_low * 1000.0 / 8.0) * duration)
+            bytes_high = int((total_high * 1000.0 / 8.0) * duration)
+            bytes_mid = int((total_mid * 1000.0 / 8.0) * duration)
+
+            # Add small overhead for subtitles/containers (5%)
+            return int(bytes_mid * 1.05)
+        except Exception:
+            return None
     
     @staticmethod
     def load_config(config_path: str) -> Optional[Dict]:
@@ -485,6 +997,56 @@ class DiscRipper:
             # Parse the output
             disc_info = self._parse_makemkv_info(result.stdout)
             logger.info(f"📊 Found {len(disc_info.get('titles', []))} titles on disc")
+            # Infer disc type
+            try:
+                raw_type = disc_info.get('disc_type_raw') or disc_info.get('disc_type')
+                raw_type_source = disc_info.get('disc_type_source')
+                inferred_type = self._infer_disc_type_from_info(disc_info)
+                self.disc_type = inferred_type
+                if inferred_type:
+                    disc_info['disc_type'] = inferred_type
+                    if raw_type:
+                        if raw_type_source:
+                            logger.info(f"🛰️  Detected disc type: {inferred_type.upper()} ({raw_type_source}='{raw_type}')")
+                        else:
+                            logger.info(f"🛰️  Detected disc type: {inferred_type.upper()} ('{raw_type}')")
+                    else:
+                        logger.info(f"🛰️  Detected disc type: {inferred_type.upper()} (inferred)")
+                else:
+                    self.disc_type = None
+                    if raw_type:
+                        if raw_type_source:
+                            logger.info(f"🛰️  Could not normalize disc type from {raw_type_source}='{raw_type}'")
+                        else:
+                            logger.info(f"🛰️  Could not normalize disc type from '{raw_type}'")
+            except Exception:
+                self.disc_type = None
+            # Compute disc-level BPS estimate from available title sizes and durations
+            try:
+                samples = []
+                for t in disc_info.get('titles', []):
+                    dur = int(t.get('duration', 0))
+                    sz = int(t.get('size', 0)) if t.get('size') else 0
+                    if dur > 0 and sz > 0:
+                        samples.append(sz / float(dur))
+                if samples:
+                    # Use median to reduce outlier influence
+                    samples.sort()
+                    mid = len(samples) // 2
+                    if len(samples) % 2 == 1:
+                        self.disc_bps_estimate = samples[mid]
+                    else:
+                        self.disc_bps_estimate = (samples[mid - 1] + samples[mid]) / 2.0
+                    logger.info(f"🧮 Estimated disc mux rate: {self.human_bytes(int(self.disc_bps_estimate))}/s")
+                else:
+                    # Default based on disc type (DVD vs BD)
+                    self.disc_bps_estimate = self._default_bps_fallback()
+                    logger.info(
+                        f"🧮 No size info from scan; using default {self.human_bytes(int(self.disc_bps_estimate))}/s"
+                    )
+            except Exception:
+                self.disc_bps_estimate = self._default_bps_fallback()
+                logger.debug("Could not compute disc-level BPS; using type-based fallback")
             
             return disc_info
             
@@ -500,10 +1062,29 @@ class DiscRipper:
         disc_info = {
             'titles': [],
             'disc_name': '',
-            'disc_type': ''
+            'disc_type': '',
+            'disc_type_raw': '',
+            'disc_type_source': ''
         }
         
         current_title = None
+        disc_name_candidates = []
+
+        def _looks_like_language_label(val: str) -> bool:
+            v = (val or '').strip().lower()
+            if not v:
+                return False
+            lang_words = {
+                'english', 'inglés', 'ingles', 'inglês', 'french', 'francais', 'français',
+                'espanol', 'español', 'spanish', 'deutsch', 'german', 'italian', 'italiano',
+                'japanese', 'japonais', 'japones', 'japonês', 'chinese', 'mandarin', 'cantonese',
+                'korean', 'thai', 'russian', 'portuguese', 'brazilian portuguese'
+            }
+            if v in lang_words:
+                return True
+            if re.fullmatch(r'[a-z]{2,3}', v):
+                return True
+            return False
         
         for line in output.split('\n'):
             # Title information
@@ -562,12 +1143,45 @@ class DiscRipper:
                         elif 'Subtitle' in value:
                             title['subtitle_tracks'].append({'id': stream_id, 'type': 'subtitle', 'language': ''})
             
-            # Disc name
+            # Disc type and name
+            elif line.startswith('CINFO:0'):
+                match = re.search(r'"([^"]+)"', line)
+                if match and not disc_info['disc_type_raw']:
+                    disc_info['disc_type_raw'] = match.group(1).strip()
+                    disc_info['disc_type_source'] = 'CINFO:0'
+            elif line.startswith('CINFO:1'):
+                # Some MakeMKV versions provide disc type in CINFO:1 (e.g., "DVD disc")
+                match = re.search(r'"([^"]+)"', line)
+                if match and not disc_info['disc_type_raw']:
+                    disc_info['disc_type_raw'] = match.group(1).strip()
+                    disc_info['disc_type_source'] = 'CINFO:1'
             elif line.startswith('CINFO:2'):
                 match = re.search(r'"([^"]+)"', line)
                 if match:
-                    disc_info['disc_name'] = match.group(1)
+                    disc_name_candidates.append(match.group(1).strip())
         
+        # Choose best disc name candidate
+        for cand in disc_name_candidates:
+            if _looks_like_language_label(cand):
+                continue
+            if cand and cand.lower() not in ('unknown',):
+                disc_info['disc_name'] = cand
+                break
+        # Fallback to longest/primary title name if disc_name still missing or looks like language
+        if not disc_info['disc_name'] or _looks_like_language_label(disc_info['disc_name']):
+            try:
+                titles = disc_info.get('titles', [])
+                if titles:
+                    main_title = max(titles, key=lambda t: t.get('duration', 0))
+                    cand = (main_title.get('name') or '').strip()
+                    if cand and not _looks_like_language_label(cand):
+                        disc_info['disc_name'] = cand
+            except Exception:
+                pass
+        # If still empty, fallback to first non-language candidate even if previously skipped
+        if not disc_info['disc_name'] and disc_name_candidates:
+            disc_info['disc_name'] = disc_name_candidates[0]
+
         return disc_info
     
     def _parse_duration(self, duration_str: str) -> int:
@@ -609,6 +1223,18 @@ class DiscRipper:
             # Sort by title ID to maintain episode order
             episodes.sort()
             logger.info(f"Identified {len(episodes)} TV episodes")
+            
+            # Warn if this might be a movie disc instead
+            if episodes and len(episodes) <= 3:
+                # Check if there's a much longer title that might be a movie
+                longest_title = max(titles, key=lambda t: t.get('duration', 0))
+                longest_duration = longest_title.get('duration', 0)
+                if longest_duration >= MIN_MOVIE_DURATION_SECONDS:
+                    logger.warning(
+                        f"⚠️  Found only {len(episodes)} episode(s), but disc has a {int(longest_duration/60)}-minute title. "
+                        f"This might be a movie disc. Consider using rip_movie.sh instead."
+                    )
+            
             return episodes
         else:
             # For movies, find the longest title (main feature)
@@ -647,12 +1273,9 @@ class DiscRipper:
         ripped_files = []
         
         for title_id in title_ids:
-            # Log current free space before each title rip
+            # Check current free space (used for warnings/estimates)
             free_temp = self.get_free_space_bytes(self.temp_dir)
             free_out = self.get_free_space_bytes(self.output_dir)
-            logger.info(
-                f"💾 Free space - temp: {self.human_bytes(free_temp)}, output: {self.human_bytes(free_out)}"
-            )
             # If we have disc_info, estimate title size
             est_title_bytes = None
             expected_file = None
@@ -776,13 +1399,14 @@ class DiscRipper:
                 save_start_ts = None
                 last_mkv_size = 0
                 # If MakeMKV didn't provide an explicit size estimate, approximate from duration
-                # Assume average muxed bitrate ~ 2.5 MB/s (≈20 Mb/s) across video+audio
+                # Estimate muxed bitrate from disc-level BPS or a conservative default (~1.1 MB/s)
                 if est_title_bytes is None and disc_info:
                     try:
                         t = next((x for x in disc_info.get('titles', []) if int(x.get('id', -1)) == int(title_id)), None)
                         dur = int(t.get('duration', 0)) if t else 0
                         if dur > 0:
-                            est_title_bytes = int(dur * 2.5 * 1024 * 1024)
+                            bps = self.disc_bps_estimate if self.disc_bps_estimate else DEFAULT_BPS_BD
+                            est_title_bytes = int(dur * bps)
                             # Use tqdm-aware logging to avoid interfering with the bar line
                             write_log(f"📊 Estimated title {title_id} size (approx.): {self.human_bytes(est_title_bytes)}", 'info')
                     except Exception:
@@ -1238,7 +1862,7 @@ class DiscRipper:
         Returns:
             Dictionary with metadata or None
         """
-        logger.info(f"Looking up metadata for: {title}")
+        logger.debug(f"Looking up metadata for: {title}")
         
         # Check if metadata lookup is enabled in config
         metadata_config = self.config.get('metadata', {})
@@ -1266,11 +1890,19 @@ class DiscRipper:
         metadata = None
         
         if is_tv_series:
-            # Search for TV series
-            metadata = self.online_identifier.search_tmdb_tv(title, year)
+            # Try OMDB for TV series
+            metadata = self.online_identifier.search_omdb_tv(title, year)
+            if not metadata:
+                # Fallback to TMDB
+                logger.debug("OMDB TV lookup failed, trying TMDB...")
+                metadata = self.online_identifier.search_tmdb_tv(title, year)
         else:
-            # Search for movie
-            metadata = self.online_identifier.search_tmdb_movie(title, year)
+            # Try OMDB for movie
+            metadata = self.online_identifier.search_omdb_movie(title, year)
+            if not metadata:
+                # Fallback to TMDB
+                logger.debug("OMDB movie lookup failed, trying TMDB...")
+                metadata = self.online_identifier.search_tmdb_movie(title, year)
         
         # If online lookup succeeded, return the metadata
         if metadata:
@@ -1362,6 +1994,8 @@ class DiscRipper:
         # Check dependencies
         if not self.check_dependencies():
             return []
+        # Persist mode for estimation fallbacks
+        self.is_tv_series = is_tv_series
         
         # Scan disc
         disc_info = self.scan_disc(disc_path)
@@ -1372,6 +2006,8 @@ class DiscRipper:
         # Use disc name if title not provided
         if not title:
             title = disc_info.get('disc_name', 'Unknown')
+            if title != 'Unknown':
+                logger.info(f"📀 Using disc name: {title}")
         
         # Identify titles to rip
         title_ids = self.identify_main_content(disc_info, is_tv_series)
@@ -1379,28 +2015,60 @@ class DiscRipper:
             logger.error("No suitable titles found on disc")
             return []
         
+        # Estimate required space before ripping (raw MKVs + encoded buffer)
+        try:
+            est_rip_total = self.estimate_required_space_bytes(disc_info, title_ids)
+            # If zero, force duration-based fallback across selected titles
+            if est_rip_total <= 0:
+                bps = self.disc_bps_estimate if self.disc_bps_estimate else self._default_bps_fallback()
+                forced_total = 0
+                try:
+                    id_set = set(str(t) for t in title_ids)
+                    for t in disc_info.get('titles', []):
+                        if str(t.get('id')) in id_set:
+                            dur = int(t.get('duration', 0) or 0)
+                            if dur > 0:
+                                forced_total += int(dur * bps)
+                    if forced_total > 0:
+                        est_rip_total = int(forced_total * 1.1)
+                        logger.info(f"📦 Using duration-based estimate with {self.human_bytes(int(bps))}/s fallback")
+                except Exception:
+                    pass
+            # Encoding output typically ~30-50% of rip; reserve 40% buffer in temp
+            est_encode_buffer = int(est_rip_total * 0.4)
+            free_temp = self.get_free_space_bytes(self.temp_dir)
+            free_out = self.get_free_space_bytes(self.output_dir)
+            logger.info(
+                f"📦 Estimated rip size: {self.human_bytes(est_rip_total)}; "
+                f"encoding buffer: {self.human_bytes(est_encode_buffer)}"
+            )
+            logger.info(
+                f"💾 Free space -> temp: {self.human_bytes(free_temp)}, output: {self.human_bytes(free_out)}"
+            )
+            if free_temp < (est_rip_total + est_encode_buffer):
+                logger.warning(
+                    "Temp space may be insufficient for rip + encode. "
+                    f"needed≈{self.human_bytes(est_rip_total + est_encode_buffer)}"
+                )
+        except Exception:
+            pass
+
+        # Look up metadata before ripping (pass disc_info with disc_id for better identification)
+        disc_id = disc_info.get('disc_id', '')
+        if disc_id:
+            logger.info(f"Using disc ID for metadata lookup: {disc_id}")
+        
+        logger.info(f"🔍 Looking up metadata for: '{title}'" + (f" ({year})" if year else ""))
+        metadata = self.lookup_metadata(title, is_tv_series, year, disc_path)
+        if not metadata:
+            metadata = {'title': title, 'year': year, 
+                       'type': 'tv' if is_tv_series else 'movie'}
+        
         # Rip titles (provide disc_info for better diagnostics)
         ripped_files = self.rip_titles(disc_path, title_ids, disc_info=disc_info)
         if not ripped_files:
             logger.error("❌ Failed to rip any titles")
             return []
-        
-        # Extract title from ripped filename if we don't have a good one yet
-        # (MakeMKV often has better title info than disc name)
-        if title in ('Unknown', disc_info.get('disc_name', 'Unknown')) and ripped_files:
-            extracted_title = self.extract_title_from_filename(ripped_files[0])
-            if extracted_title:
-                logger.info(f"Using title from filename: {extracted_title}")
-                title = extracted_title
-        
-        # Look up metadata (pass disc_info with disc_id for better identification)
-        disc_id = disc_info.get('disc_id', '')
-        if disc_id:
-            logger.info(f"Using disc ID for metadata lookup: {disc_id}")
-        metadata = self.lookup_metadata(title, is_tv_series, year, disc_path)
-        if not metadata:
-            metadata = {'title': title, 'year': year, 
-                       'type': 'tv' if is_tv_series else 'movie'}
         
         # Encode and rename files
         final_files = []
@@ -1413,6 +2081,36 @@ class DiscRipper:
                 output_name = f"temp_movie.mkv"
             
             output_file = self.temp_dir / output_name
+            
+            # Pre-encode space check using estimated encoded size
+            try:
+                file_info = self.analyze_file(ripped_file)
+                enc_est = self.estimate_encoded_output_bytes(file_info, metadata) if file_info else None
+            except Exception:
+                file_info = None
+                enc_est = None
+
+            try:
+                free_temp = self.get_free_space_bytes(self.temp_dir)
+                free_out = self.get_free_space_bytes(self.output_dir)
+                rip_sz = ripped_file.stat().st_size
+                if enc_est:
+                    logger.info(f"📐 Estimated encoded size: {self.human_bytes(enc_est)} (midpoint)")
+                    # Use a conservative multiplier to estimate high-end for warnings
+                    enc_high = int(enc_est * 1.25)
+                    needed_temp = rip_sz + enc_high
+                    if free_temp < needed_temp:
+                        logger.warning(
+                            f"Temp space may be insufficient to hold both rip and encode concurrently. "
+                            f"needed≈{self.human_bytes(needed_temp)} (high), free={self.human_bytes(free_temp)}"
+                        )
+                    if free_out < enc_high:
+                        logger.warning(
+                            f"Output space may be insufficient for encoded file. "
+                            f"needed≈{self.human_bytes(enc_high)} (high), free={self.human_bytes(free_out)}"
+                        )
+            except Exception:
+                pass
             
             # Encode
             if self.encode_file(ripped_file, output_file):
@@ -1498,6 +2196,12 @@ def main():
         action='store_true',
         help='Enable debug logging'
     )
+
+    parser.add_argument(
+        '--disc-type',
+        choices=['dvd', 'bd', 'uhd'],
+        help='Override detected disc type for size estimation (dvd, bd, uhd)'
+    )
     
     args = parser.parse_args()
     
@@ -1521,6 +2225,9 @@ def main():
     
     # Create ripper instance
     ripper = DiscRipper(args.output, args.temp, config)
+    if args.disc_type:
+        ripper.disc_type = args.disc_type
+        logger.info(f"🔧 Disc type override: {args.disc_type.upper()}")
     
     # Process disc
     output_files = ripper.process_disc(
