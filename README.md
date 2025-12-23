@@ -139,6 +139,7 @@ Use the `rip_movie.sh` script for movie discs:
 - `--temp DIR` - Temporary directory (default: `OUTPUT_DIR/.makemkv`)
 - `--title TITLE` - Movie title for naming
 - `--year YEAR` - Release year for naming
+ - `--disc-type TYPE` - Override disc type for size estimation (`dvd`, `bd`, `uhd`)
 
 **Example:**
 ```bash
@@ -166,6 +167,7 @@ Use the `rip_tv.sh` script for TV series discs:
 - `--temp DIR` - Temporary directory (default: `OUTPUT_DIR/.makemkv`)
 - `--title TITLE` - TV series title for naming
 - `--season NUM` - Season number (default: 1)
+ - `--disc-type TYPE` - Override disc type for size estimation (`dvd`, `bd`, `uhd`)
 
 **Example:**
 ```bash
@@ -206,6 +208,11 @@ Rip a movie with custom disc path:
 Rip TV series episodes:
 ```bash
 ./rip_disc.py --disc disc:0 --tv --title "Friends" --season 1 --output ~/TV
+```
+
+Force DVD fallback for a TV special (more accurate size estimation when `CINFO:0` is missing):
+```bash
+./rip_tv.sh --output ~/TV --title "The Cat in the Hat" --year 1971 --disc-type dvd
 ```
 
 ### Batch Processing
@@ -391,6 +398,16 @@ The script defaults to `disc:0` which is typically the first optical drive. If y
 
 # Use specific device (macOS)
 ./rip_disc.py --disc /dev/disk2 --output ~/Movies
+```
+
+### Size Estimation
+
+Pre-rip size estimation uses MakeMKV's reported sizes when available; otherwise it falls back to duration-based estimates with a disc-type-aware mux rate:
+- DVD: ~1.1 MB/s
+- Blu-ray: ~4.5 MB/s
+- UHD/4K: ~6.5 MB/s
+
+You can override detection with `--disc-type dvd|bd|uhd` in `rip_movie.sh` or `rip_tv.sh`. The progress bar will display a per-title estimate, which tends to be more accurate than the aggregate pre-rip estimate.
 ```
 
 ## Troubleshooting

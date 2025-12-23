@@ -13,6 +13,7 @@ OUTPUT_DIR=""
 TEMP_DIR=""
 TITLE=""
 YEAR=""
+DISC_TYPE=""
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -37,6 +38,10 @@ while [[ $# -gt 0 ]]; do
             YEAR="$2"
             shift 2
             ;;
+        --disc-type)
+            DISC_TYPE="$2"
+            shift 2
+            ;;
         --help)
             echo "Usage: $0 --output OUTPUT_DIR [OPTIONS]"
             echo ""
@@ -46,6 +51,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --temp DIR         Temporary directory (default: OUTPUT_DIR/.makemkv)"
             echo "  --title TITLE      Movie title"
             echo "  --year YEAR        Release year"
+            echo "  --disc-type TYPE   Override disc type (dvd|bd|uhd)"
             echo "  --help             Show this help message"
             exit 0
             ;;
@@ -86,6 +92,10 @@ fi
 
 if [ -n "$YEAR" ]; then
     CMD_ARGS+=(--year "$YEAR")
+fi
+
+if [ -n "$DISC_TYPE" ]; then
+    CMD_ARGS+=(--disc-type "$DISC_TYPE")
 fi
 
 # Execute
