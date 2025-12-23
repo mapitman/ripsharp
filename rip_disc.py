@@ -108,6 +108,13 @@ except ImportError as e:
     logger.warning(f"Rich not available: {e}")
 
 try:
+    from ffmpeg_progress_yield import FfmpegProgress
+    FFMPEG_PROGRESS_AVAILABLE = True
+except ImportError:
+    FFMPEG_PROGRESS_AVAILABLE = False
+    logger.debug("ffmpeg-progress-yield not available; FFmpeg encoding progress disabled")
+
+try:
     from colorama import init as colorama_init, Fore, Style
     COLORAMA_AVAILABLE = True
     colorama_init()
@@ -1055,7 +1062,7 @@ class DiscRipper:
                 reverse=True
             )
             video_idx = video_streams[0].get('index', 0)
-            cmd.extend(['-map', f'0:{video_idx}', '-c:v', 'copy'])
+            cmd.extend(['-map', f'0:{video_idx}', '-c:v', 'libx264', '-crf', '20', '-preset', 'slow', '-tune', 'film'])
         
         # Audio: include stereo and surround if available
         audio_streams = [s for s in streams if s.get('codec_type') == 'audio']
@@ -1090,29 +1097,129 @@ class DiscRipper:
                     cmd.extend([f'-c:s:{subtitle_map_idx}', 'copy'])
                     subtitle_map_idx += 1
         
-        # Output file
-        cmd.extend(['-y', str(output_file)])
+        # Output file with progress reporting
+        cmd.extend(['-progress', 'pipe:1', '-y', str(output_file)])
         
-        logger.info(f"Encoding command: {' '.join(cmd)}")
+        logger.info(f"Encoding {input_file.name}...")
         
         try:
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=7200  # 2 hours timeout
-            )
-            
-            if result.returncode == 0:
-                logger.info(f"Successfully encoded to {output_file}")
-                return True
+            # Use ffmpeg-progress-yield if available for progress tracking
+            if FFMPEG_PROGRESS_AVAILABLE:
+                return self._encode_with_progress(cmd, input_file, output_file)
             else:
-                logger.error(f"Encoding failed: {result.stderr}")
-                return False
+                # Fallback to basic subprocess run
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=7200  # 2 hours timeout
+                )
+                
+                if result.returncode == 0:
+                    logger.info(f"✅ Successfully encoded to {output_file}")
+                    return True
+                else:
+                    logger.error(f"Encoding failed: {result.stderr}")
+                    return False
                 
         except subprocess.TimeoutExpired:
             logger.error("Encoding timed out")
             return False
+        except Exception as e:
+            logger.error(f"Error encoding file: {e}")
+            return False
+    
+    def _encode_with_progress(self, cmd: List[str], input_file: Path, output_file: Path) -> bool:
+        """
+        Encode file using ffmpeg-progress-yield for progress tracking.
+        
+        Args:
+            cmd: FFmpeg command list
+            input_file: Path to input file
+            output_file: Path to output file
+            
+        Returns:
+            True if encoding succeeded, False otherwise
+        """
+        try:
+            # Remove 'ffmpeg' from command; FfmpegProgress handles that
+            # Pass full ffmpeg command but remove explicit progress args
+            cmd_args = [arg for arg in (cmd if isinstance(cmd, list) else list(cmd)) if arg not in ['-progress', 'pipe:1']]
+
+            # Use context manager for automatic cleanup
+            ff_ctx = FfmpegProgress(cmd_args)
+            
+            # Initialize Rich progress bar if available
+            progress_bar = None
+            live = None
+            task_id = None
+            tty_file = None
+            
+            if RICH_AVAILABLE:
+                try:
+                    # Get terminal size
+                    rows, cols = (24, 80)
+                    try:
+                        fd = os.open('/dev/tty', os.O_RDONLY)
+                        try:
+                            buf = struct.pack('hhhh', 0, 0, 0, 0)
+                            res = fcntl.ioctl(fd, termios.TIOCGWINSZ, buf)
+                            r, c, _, _ = struct.unpack('hhhh', res)
+                            if r and c:
+                                rows, cols = int(r), int(c)
+                        finally:
+                            os.close(fd)
+                    except Exception:
+                        pass
+                    
+                    try:
+                        tty_file = open('/dev/tty', 'w')
+                        console = Console(file=tty_file, force_terminal=True, width=cols)
+                    except Exception:
+                        console = Console(force_terminal=True, width=cols)
+                        tty_file = None
+                    
+                    progress_bar = Progress(
+                        TextColumn("[cyan]{task.description}"),
+                        BarColumn(bar_width=None),
+                        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+                        expand=True,
+                    )
+                    task_id = progress_bar.add_task(f"Encoding {input_file.name}", total=100)
+                    live = Live(progress_bar, console=console, refresh_per_second=10)
+                    live.start()
+                except Exception:
+                    progress_bar = None
+                    live = None
+            
+            # Track progress
+            try:
+                with ff_ctx as ff:
+                    last = 0
+                    for pct in ff.run_command_with_progress():
+                        # pct is a float [0..100]
+                        if progress_bar and task_id is not None:
+                            progress_bar.update(task_id, completed=int(pct))
+                            # Avoid flooding logs; only update if percent increases
+                            last = int(pct)
+                
+                if progress_bar and task_id is not None:
+                    progress_bar.update(task_id, completed=100)
+                    live.stop()
+                    if tty_file:
+                        tty_file.close()
+                
+                logger.info(f"✅ Successfully encoded to {output_file}")
+                return True
+                
+            except Exception as e:
+                if live:
+                    live.stop()
+                if tty_file:
+                    tty_file.close()
+                logger.error(f"Error during encoding: {e}")
+                return False
+                
         except Exception as e:
             logger.error(f"Error encoding file: {e}")
             return False
