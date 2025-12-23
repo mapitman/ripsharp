@@ -15,13 +15,21 @@ EXTRA_ARGS ?=
 
 help:
 	@echo "Available targets:"
-	@echo "  make venv      - Create virtual environment"
-	@echo "  make install   - Install dependencies in virtual environment"
+	@echo ""
+	@echo "Setup:"
+	@echo "  make all       - Create venv and install dependencies (same as 'make install')"
+	@echo "  make install   - Create venv and install dependencies (same as 'make all')"
+	@echo "  make venv      - Create virtual environment only"
+	@echo ""
+	@echo "Activation:"
 	@echo "  make activate  - Start a shell with virtual environment activated"
-	@echo "  make rip-movie - Activate venv and run rip_movie.sh (use OUTPUT=/path and EXTRA_ARGS)"
-	@echo "  make rip-tv    - Activate venv and run rip_tv.sh (use OUTPUT=/path and EXTRA_ARGS)"
+	@echo ""
+	@echo "Usage:"
+	@echo "  make rip-movie - Rip a movie disc (use OUTPUT=/path and EXTRA_ARGS='--title \"Title\" --year 2024')"
+	@echo "  make rip-tv    - Rip a TV series disc (use OUTPUT=/path and EXTRA_ARGS='--title \"Show\" --season 1')"
+	@echo ""
+	@echo "Cleanup:"
 	@echo "  make clean     - Remove virtual environment"
-	@echo "  make all       - Create venv and install dependencies"
 
 venv:
 	@echo "Creating virtual environment..."
