@@ -87,7 +87,7 @@ if [ -z "$TEMP_DIR" ]; then
 fi
 
 # Build command array
-CMD_ARGS=(python3 rip_disc.py --output "$OUTPUT_DIR" --tv)
+CMD_ARGS=(dotnet run --project src/MediaEncoding -- --output "$OUTPUT_DIR" --tv)
 
 if [ -n "$DISC" ]; then
     CMD_ARGS+=(--disc "$DISC")

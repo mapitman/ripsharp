@@ -1,0 +1,15 @@
+disc:
+  default_path: "disc:0"
+  default_temp_dir: "/tmp/makemkv"
+
+output:
+  movies_dir: "~/Movies"
+  tv_dir: "~/TV"
+
+encoding:
+  include_english_subtitles: true
+  include_stereo_audio: true
+  include_surround_audio: true
+
+metadata:
+  lookup_enabled: true
