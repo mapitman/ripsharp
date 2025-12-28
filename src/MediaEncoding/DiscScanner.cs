@@ -37,35 +37,33 @@ public class DiscScanner : IDiscScanner
             }
             else if (line.StartsWith("TINFO:"))
             {
-                // Collect title metadata
-                var mId = Regex.Match(line, @"TINFO:(\d+)");
-                if (mId.Success)
+                // Parse TINFO lines: TINFO:<titleId>,<attributeId>,<flags>,"<value>"
+                // Field 2 = title name, Field 9 = duration, Field 10 = size string, Field 11 = size bytes
+                var match = Regex.Match(line, @"TINFO:(\d+),(\d+),");
+                if (match.Success)
                 {
-                    var id = int.Parse(mId.Groups[1].Value);
+                    var id = int.Parse(match.Groups[1].Value);
+                    var fieldId = int.Parse(match.Groups[2].Value);
+                    
                     if (!titles.Exists(t => t.Id == id)) titles.Add(new TitleInfo { Id = id });
+                    var title = titles.Find(x => x.Id == id)!;
 
-                    // Duration
-                    if (line.Contains("Duration"))
+                    switch (fieldId)
                     {
-                        var durStr = ExtractQuoted(line);
-                        var seconds = ParseDurationToSeconds(durStr);
-                        var t = titles.Find(x => x.Id == id)!;
-                        t.DurationSeconds = seconds;
-                    }
-                    // Size
-                    if (line.Contains("Size"))
-                    {
-                        var sizeStr = ExtractQuoted(line);
-                        if (TryParseBytes(sizeStr, out var bytes))
-                        {
-                            var t = titles.Find(x => x.Id == id)!;
-                            t.ReportedSizeBytes = bytes;
-                        }
-                    }
-                    // Disc name candidate
-                    if (line.Contains("Name") && discName == null)
-                    {
-                        discName = ExtractQuoted(line);
+                        case 2: // Title name
+                            var name = ExtractQuoted(line);
+                            if (!string.IsNullOrWhiteSpace(name) && discName == null)
+                                discName = name;
+                            break;
+                        case 9: // Duration (HH:MM:SS format)
+                            var durStr = ExtractQuoted(line);
+                            title.DurationSeconds = ParseDurationToSeconds(durStr);
+                            break;
+                        case 11: // Size in bytes
+                            var sizeStr = ExtractQuoted(line);
+                            if (long.TryParse(sizeStr, out var bytes))
+                                title.ReportedSizeBytes = bytes;
+                            break;
                     }
                 }
             }
@@ -96,18 +94,14 @@ public class DiscScanner : IDiscScanner
         }
         else
         {
-            // Longest title >= 45 min
-            var longest = 0;
-            var longestId = titles[0].Id;
+            // All movie-length titles >= 45 min (captures theatrical, extended, director's cut, etc.)
             foreach (var t in titles)
             {
-                if (t.DurationSeconds >= 45 * 60 && t.DurationSeconds > longest)
-                {
-                    longest = t.DurationSeconds;
-                    longestId = t.Id;
-                }
+                if (t.DurationSeconds >= 45 * 60)
+                    ids.Add(t.Id);
             }
-            return new List<int> { longestId };
+            ids.Sort();
+            return ids;
         }
     }
 

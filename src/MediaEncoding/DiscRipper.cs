@@ -34,7 +34,13 @@ public class DiscRipper : IDiscRipper
         }
 
         var titleForMeta = options.Title ?? discInfo.DiscName;
-        var metadata = await _metadata.LookupAsync(titleForMeta ?? "", options.Tv, options.Year);
+        // If no title provided and disc name is empty, use a fallback
+        if (string.IsNullOrWhiteSpace(titleForMeta))
+        {
+            titleForMeta = options.Tv ? "TV Episode" : "Movie";
+            Console.WriteLine($"⚠️ No title specified and disc name unavailable. Using fallback: '{titleForMeta}'");
+        }
+        var metadata = await _metadata.LookupAsync(titleForMeta, options.Tv, options.Year);
         var titleIds = _scanner.IdentifyMainContent(discInfo, options.Tv);
         if (titleIds.Count == 0)
         {
@@ -95,6 +101,8 @@ public class DiscRipper : IDiscRipper
         {
             var src = rippedFiles[i];
             string outputName;
+            string? versionSuffix = null;
+            
             if (options.Tv)
             {
                 var episodeNum = (options.EpisodeStart - 1) + i + 1;
@@ -102,13 +110,21 @@ public class DiscRipper : IDiscRipper
             }
             else
             {
-                outputName = Path.Combine(options.Output, "temp_movie.mkv");
+                // For movies with multiple versions, add a distinguishing suffix
+                if (rippedFiles.Count > 1)
+                {
+                    var titleId = titleIds[i];
+                    var titleInfo = discInfo.Titles.FirstOrDefault(t => t.Id == titleId);
+                    var durationMin = titleInfo?.DurationSeconds / 60 ?? 0;
+                    versionSuffix = $" [{durationMin}min]";
+                }
+                outputName = Path.Combine(options.Output, $"temp_movie_{i}.mkv");
             }
             if (File.Exists(outputName)) File.Delete(outputName);
 
             if (await _encoder.EncodeAsync(src, outputName, includeEnglishSubtitles: true))
             {
-                var final = RenameFile(outputName, metadata!, options.Tv ? ((options.EpisodeStart - 1) + i + 1) : null, options.Season);
+                var final = RenameFile(outputName, metadata!, options.Tv ? ((options.EpisodeStart - 1) + i + 1) : null, options.Season, versionSuffix);
                 finalFiles.Add(final);
             }
         }
@@ -118,7 +134,7 @@ public class DiscRipper : IDiscRipper
         return finalFiles;
     }
 
-    private static string RenameFile(string filePath, Metadata metadata, int? episodeNum, int seasonNum)
+    private static string RenameFile(string filePath, Metadata metadata, int? episodeNum, int seasonNum, string? versionSuffix = null)
     {
         var title = metadata.Title.Trim();
         var year = metadata.Year;
@@ -131,7 +147,9 @@ public class DiscRipper : IDiscRipper
         }
         else
         {
-            filename = year.HasValue ? $"{safeTitle} ({year.Value}).mkv" : $"{safeTitle}.mkv";
+            var yearPart = year.HasValue ? $" ({year.Value})" : "";
+            var suffix = versionSuffix ?? "";
+            filename = $"{safeTitle}{yearPart}{suffix}.mkv";
         }
         var newPath = Path.Combine(Path.GetDirectoryName(filePath)!, filename);
         if (File.Exists(newPath)) File.Delete(newPath);
