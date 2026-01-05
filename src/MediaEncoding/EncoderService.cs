@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Threading.Tasks;
+using Spectre.Console;
 
 namespace MediaEncoding;
 
@@ -18,12 +19,23 @@ public class EncoderService : IEncoderService
         if (exit != 0) return null;
         var doc = JsonDocument.Parse(json.ToString());
         var streams = new List<StreamInfo>();
+        double? durationSeconds = null;
+        
+        // Extract duration from format section
+        if (doc.RootElement.TryGetProperty("format", out var format) &&
+            format.TryGetProperty("duration", out var dur) &&
+            double.TryParse(dur.GetString(), out var durVal))
+        {
+            durationSeconds = durVal;
+        }
+        
         foreach (var s in doc.RootElement.GetProperty("streams").EnumerateArray())
         {
             var si = new StreamInfo
             {
                 Index = s.TryGetProperty("index", out var idx) ? idx.GetInt32() : 0,
                 CodecType = s.TryGetProperty("codec_type", out var ct) ? ct.GetString() ?? string.Empty : string.Empty,
+                CodecName = s.TryGetProperty("codec_name", out var cn) ? cn.GetString() : null,
                 Language = s.TryGetProperty("tags", out var tags) && tags.TryGetProperty("language", out var lang) ? lang.GetString() : null,
                 Channels = s.TryGetProperty("channels", out var ch) ? ch.GetInt32() : (int?)null,
                 Width = s.TryGetProperty("width", out var w) ? w.GetInt32() : (int?)null,
@@ -31,31 +43,154 @@ public class EncoderService : IEncoderService
             };
             streams.Add(si);
         }
-        return new FileAnalysis { Streams = streams };
+        return new FileAnalysis { Streams = streams, DurationSeconds = durationSeconds };
     }
 
     public async Task<bool> EncodeAsync(string inputFile, string outputFile, bool includeEnglishSubtitles)
     {
-        // Build ffmpeg command: copy highest resolution video, include English stereo + surround, English subtitles.
         var analysis = await AnalyzeAsync(inputFile);
         if (analysis == null) return false;
         var streams = analysis.Streams;
         var video = ChooseBestVideo(streams);
-        var englishAudios = streams.FindAll(s => s.CodecType == "audio" && (s.Language?.StartsWith("en") ?? false));
-        var englishSubs = includeEnglishSubtitles ? streams.FindAll(s => s.CodecType == "subtitle" && (s.Language?.StartsWith("en") ?? false)) : new List<StreamInfo>();
+        // Filter to only English audio tracks
+        var audioStreams = streams.FindAll(s => s.CodecType == "audio" && 
+            (s.Language == null || s.Language == "eng" || s.Language == "en"));
+        var subtitleStreams = includeEnglishSubtitles
+            ? streams.FindAll(s => s.CodecType == "subtitle")
+            : new List<StreamInfo>();
 
         var args = new System.Text.StringBuilder();
+        // Input probe settings first to satisfy ffmpeg recommendation for PGS subs
+        args.Append("-probesize 400M -analyzeduration 400M ");
         args.Append($"-i \"{inputFile}\" ");
-        // Map streams explicitly
-        if (video != null) args.Append($"-map 0:{video.Index} ");
-        foreach (var a in englishAudios) args.Append($"-map 0:{a.Index} ");
-        foreach (var sub in englishSubs) args.Append($"-map 0:{sub.Index} ");
-        // Copy codecs for now to preserve quality
-        args.Append("-c copy ");
+
+        // Map the selected video first
+        if (video != null)
+            args.Append($"-map 0:{video.Index} ");
+
+        // Map every audio stream to preserve languages and commentaries
+        foreach (var a in audioStreams)
+            args.Append($"-map 0:{a.Index} ");
+
+        // Map subtitles when requested
+        foreach (var s in subtitleStreams)
+            args.Append($"-map 0:{s.Index} ");
+
+        args.Append("-map_chapters 0 ");
+
+        // Video encoding per HandBrake mkv preset (x264, slow, film, CRF 20, decomb equivalent)
+        args.Append("-c:v libx264 -preset slow -tune film -crf 20 -pix_fmt yuv420p -vf bwdif=mode=send_frame:parity=auto:deint=interlaced ");
+
+        // Audio: copy AAC/AC3/EAC3, otherwise transcode to AAC 512k
+        int audioOut = 0;
+        foreach (var a in audioStreams)
+        {
+            var codec = a.CodecName?.ToLowerInvariant();
+            var canCopy = codec == "aac" || codec == "ac3" || codec == "eac3";
+            if (canCopy)
+            {
+                args.Append($"-c:a:{audioOut} copy ");
+            }
+            else
+            {
+                args.Append($"-c:a:{audioOut} aac -b:a:{audioOut} 512k ");
+            }
+            audioOut++;
+        }
+        if (audioStreams.Count == 0) args.Append("-an ");
+
+        // Subtitles: keep all mapped subtitles (soft subs, no burn-in)
+        int subOut = 0;
+        foreach (var _ in subtitleStreams)
+        {
+            args.Append($"-c:s:{subOut} copy ");
+            subOut++;
+        }
+        if (subtitleStreams.Count == 0) args.Append("-sn ");
+
         args.Append("-y ");
         args.Append($"\"{outputFile}\"");
 
-        var exit = await _runner.RunAsync("ffmpeg", args.ToString(), onError: e => Console.Error.WriteLine(e));
+        // Show encoding progress via ffmpeg stats output
+        var ffmpegArgs = args.ToString() + " -progress pipe:2 -loglevel warning";
+        
+        var inputFileName = System.IO.Path.GetFileName(inputFile);
+        var outputFileName = System.IO.Path.GetFileName(outputFile);
+        Console.WriteLine($"🎬 Encoding: {inputFileName}");
+        Console.WriteLine($"   → Output: {outputFileName}");
+        Console.WriteLine($"   Settings: x264 preset=slow tune=film CRF=20");
+        
+        var durationMs = (analysis.DurationSeconds ?? 0) * 1000.0;
+        var exit = 0;
+        
+        await Spectre.Console.AnsiConsole.Progress()
+            .Columns(new Spectre.Console.ProgressColumn[]
+            {
+                new Spectre.Console.TaskDescriptionColumn(),
+                new Spectre.Console.ProgressBarColumn(),
+                new Spectre.Console.PercentageColumn(),
+                new Spectre.Console.ElapsedTimeColumn
+                {
+                    Style = Color.Green
+                },
+                new Spectre.Console.RemainingTimeColumn
+                {
+                    Style = Color.Yellow
+                },
+                new Spectre.Console.SpinnerColumn(),
+            })
+            .StartAsync(async ctx =>
+            {
+                var task = ctx.AddTask("[green]Encoding[/]", maxValue: 100);
+                double currentTimeMs = 0;
+                string currentSpeed = "0";
+                
+                exit = await _runner.RunAsync("ffmpeg", ffmpegArgs,
+                    onOutput: line => {
+                        // ffmpeg stdout - not used with -progress pipe:2
+                    },
+                    onError: e => {
+                        // Progress lines come in key=value format on stderr
+                        // Use out_time_us (microseconds) for accurate progress tracking
+                        if (e.StartsWith("out_time_us="))
+                        {
+                            var timeStr = e.Substring("out_time_us=".Length).Trim();
+                            if (double.TryParse(timeStr, out var timeUs) && durationMs > 0)
+                            {
+                                currentTimeMs = timeUs / 1000.0;  // Convert microseconds to milliseconds
+                                var pct = Math.Min(100, (currentTimeMs / durationMs) * 100.0);
+                                task.Value = pct;
+                            }
+                        }
+                        else if (e.StartsWith("speed="))
+                        {
+                            var speed = e.Substring("speed=".Length).TrimEnd('x');
+                            if (!string.IsNullOrEmpty(speed) && speed != "0.00" && speed != "N/A")
+                            {
+                                currentSpeed = speed;
+                                task.Description = $"[green]Encoding ({speed}x)[/]";
+                            }
+                        }
+                        else
+                        {
+                            // Filter out other progress lines
+                            bool IsProgressLine(string s) =>
+                                s.StartsWith("frame=") || s.StartsWith("fps=") || s.StartsWith("stream_") ||
+                                s.StartsWith("bitrate=") || s.StartsWith("total_size=") || s.StartsWith("out_time") ||
+                                s.StartsWith("dup_frames=") || s.StartsWith("drop_frames=") || s.StartsWith("progress=");
+
+                            if (string.IsNullOrWhiteSpace(e) || IsProgressLine(e)) return;
+                            Spectre.Console.AnsiConsole.MarkupLine($"[red]❌ ffmpeg: {Spectre.Console.Markup.Escape(e)}[/]");
+                        }
+                    });
+                
+                if (exit == 0 && task.Value < 100)
+                {
+                    task.Value = 100;
+                }
+                task.StopTask();
+            });
+        
         return exit == 0;
     }
 

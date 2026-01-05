@@ -29,6 +29,12 @@ public class RipOptions
                 case "--output": opts.Output = next() ?? opts.Output; break;
                 case "--temp": opts.Temp = next(); break;
                 case "--tv": opts.Tv = true; break;
+                    case "--mode":
+                        var mode = next()?.ToLowerInvariant();
+                        if (mode == "tv" || mode == "series") opts.Tv = true;
+                        else if (mode == "movie" || mode == "film") opts.Tv = false;
+                        else throw new ArgumentException("--mode must be 'movie' or 'tv'");
+                        break;
                 case "--title": opts.Title = next(); break;
                 case "--year": if (int.TryParse(next(), out var y)) opts.Year = y; break;
                 case "--season": if (int.TryParse(next(), out var s)) opts.Season = s; break;

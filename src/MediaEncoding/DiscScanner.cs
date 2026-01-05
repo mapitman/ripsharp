@@ -20,16 +20,112 @@ public class DiscScanner : IDiscScanner
         string? discName = null;
         string? discType = null;
 
+        bool discDetectedPrinted = false;
+        bool scanningStarted = false;
+        int titleAddedCount = 0;
+        var printedTitles = new HashSet<string>();
         var exit = await _runner.RunAsync("makemkvcon", $"-r --robot info {discPath}", onOutput: line =>
         {
-            // Example robot lines: TINFO:0,...,"Some Title"
-            if (line.StartsWith("CINFO:"))
+            // Show relevant scanning progress and info
+            if (line.StartsWith("MSG:") && line.Contains("insert disc"))
             {
-                // Extract disc type raw from CINFO:0 lines if present
-                if (line.Contains("type"))
+                Spectre.Console.AnsiConsole.MarkupLine("[yellow]💿 Insert a disc into the drive...[/]");
+            }
+            else if (line.StartsWith("DRV:0,") && !line.Contains(",256,") && !discDetectedPrinted)
+            {
+                Spectre.Console.AnsiConsole.MarkupLine("[green]📀 Disc detected in drive...[/]");
+                discDetectedPrinted = true;
+            }
+            else if (line.StartsWith("MSG:1005,"))
+            {
+                // MakeMKV started message
+                var msg = ExtractQuoted(line);
+                if (!string.IsNullOrWhiteSpace(msg))
+                    Spectre.Console.AnsiConsole.MarkupLine($"[dim]▸ {Spectre.Console.Markup.Escape(msg)}[/]");
+            }
+            else if (line.StartsWith("MSG:1011,") || line.StartsWith("MSG:3007,"))
+            {
+                // LibreDrive mode or direct disc access
+                var msg = ExtractQuoted(line);
+                if (!string.IsNullOrWhiteSpace(msg))
+                    Spectre.Console.AnsiConsole.MarkupLine($"[dim]▸ {Spectre.Console.Markup.Escape(msg)}[/]");
+            }
+            else if (line.StartsWith("MSG:5085,"))
+            {
+                // Content hash table loaded
+                Spectre.Console.AnsiConsole.MarkupLine("[dim]▸ Loaded content hash table[/]");
+            }
+            else if (line.StartsWith("MSG:") && (line.Contains("Scanning") || line.Contains("scanning")) && !scanningStarted)
+            {
+                Spectre.Console.AnsiConsole.MarkupLine("[blue]🔍 Scanning disc structure...[/]");
+                scanningStarted = true;
+            }
+            else if (line.StartsWith("MSG:3307,"))
+            {
+                // File was added as title - show which file
+                titleAddedCount++;
+                var fileMatch = System.Text.RegularExpressions.Regex.Match(line, @"""File ([^\s]+)");
+                var titleMatch = System.Text.RegularExpressions.Regex.Match(line, @"title #(\d+)");
+                if (fileMatch.Success && titleMatch.Success)
                 {
-                    discType = ExtractQuoted(line) ?? discType;
+                    Spectre.Console.AnsiConsole.MarkupLine($"[dim green]  ✓ Added title #{titleMatch.Groups[1].Value}: {fileMatch.Groups[1].Value}[/]");
                 }
+            }
+            else if (line.StartsWith("MSG:3309,"))
+            {
+                // Duplicate title skipped - show at lower priority
+                var match = System.Text.RegularExpressions.Regex.Match(line, @"""Title ([^\s]+) is equal");
+                if (match.Success)
+                {
+                    Spectre.Console.AnsiConsole.MarkupLine($"[dim]  ~ Skipped duplicate: {match.Groups[1].Value}[/]");
+                }
+            }
+            else if (line.StartsWith("MSG:3025,"))
+            {
+                // Short title skipped - extract file name and show occasionally
+                var match = System.Text.RegularExpressions.Regex.Match(line, @"""Title #([^\s]+)");
+                if (match.Success)
+                {
+                    Spectre.Console.AnsiConsole.MarkupLine($"[dim]  - Skipped short: {match.Groups[1].Value}[/]");
+                }
+            }
+            else if (line.StartsWith("MSG:") && (line.Contains("error") || line.Contains("fail")))
+            {
+                Spectre.Console.AnsiConsole.MarkupLine($"[red]❌ {Spectre.Console.Markup.Escape(line)}[/]");
+            }
+            else if (line.StartsWith("CINFO:1,"))
+            {
+                var dtype = ExtractQuoted(line);
+                if (!string.IsNullOrWhiteSpace(dtype))
+                {
+                    Spectre.Console.AnsiConsole.MarkupLine($"[cyan]💽 Disc type: [bold]{Spectre.Console.Markup.Escape(dtype)}[/][/]");
+                }
+            }
+            else if (line.StartsWith("TINFO:"))
+            {
+                // TINFO format: TINFO:<titleId>,<fieldId>,<flags>,"<value>"
+                // Field 2 is the title name
+                var parts = line.Split(new[] { ',' }, 4);
+                if (parts.Length >= 4 && parts[1] == "2")
+                {
+                    var tname = ExtractQuoted(line);
+                    if (!string.IsNullOrWhiteSpace(tname) && printedTitles.Add(tname!))
+                    {
+                        Spectre.Console.AnsiConsole.MarkupLine($"[magenta]🎞️ Title found: [bold]{Spectre.Console.Markup.Escape(tname)}[/][/]");
+                    }
+                }
+            }
+            
+            // Parse protocol lines for disc info (non-display logic)
+            if (line.StartsWith("CINFO:1,"))
+            {
+                // CINFO:1 contains disc type (DVD, Blu-ray disc, etc.)
+                discType = ExtractQuoted(line) ?? discType;
+            }
+            else if (line.StartsWith("CINFO:2,") && string.IsNullOrEmpty(discName))
+            {
+                // CINFO:2 contains disc name/title
+                discName = ExtractQuoted(line);
             }
             else if (line.StartsWith("DRV:"))
             {
@@ -44,16 +140,18 @@ public class DiscScanner : IDiscScanner
                 {
                     var id = int.Parse(match.Groups[1].Value);
                     var fieldId = int.Parse(match.Groups[2].Value);
-                    
                     if (!titles.Exists(t => t.Id == id)) titles.Add(new TitleInfo { Id = id });
                     var title = titles.Find(x => x.Id == id)!;
-
                     switch (fieldId)
                     {
                         case 2: // Title name
                             var name = ExtractQuoted(line);
-                            if (!string.IsNullOrWhiteSpace(name) && discName == null)
-                                discName = name;
+                            if (!string.IsNullOrWhiteSpace(name))
+                            {
+                                title.Name = name;
+                                if (discName == null)
+                                    discName = name;
+                            }
                             break;
                         case 9: // Duration (HH:MM:SS format)
                             var durStr = ExtractQuoted(line);
@@ -70,6 +168,11 @@ public class DiscScanner : IDiscScanner
         });
 
         if (exit != 0) return null;
+
+        if (titleAddedCount > 0)
+        {
+            Spectre.Console.AnsiConsole.MarkupLine($"[green]✓ Scan complete - found {titleAddedCount} title(s)[/]");
+        }
 
         info.DiscName = discName ?? string.Empty;
         info.DiscType = NormalizeDiscType(discType);
@@ -94,10 +197,12 @@ public class DiscScanner : IDiscScanner
         }
         else
         {
-            // All movie-length titles >= 45 min (captures theatrical, extended, director's cut, etc.)
+            // Include only tracks longer than 30 minutes (theatrical, extended, director's cut, etc.)
+            // This captures main versions while excluding short extras
             foreach (var t in titles)
             {
-                if (t.DurationSeconds >= 45 * 60)
+                var minutes = t.DurationSeconds / 60;
+                if (minutes >= 30)
                     ids.Add(t.Id);
             }
             ids.Sort();

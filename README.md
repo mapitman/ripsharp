@@ -13,15 +13,15 @@ Tools and scripts for ripping, encoding and organizing media files from DVDs, Bl
 # 3) Run the app
 dotnet run --project src/MediaEncoding -- --help
 
-# Or use the wrapper scripts
-./rip_movie.sh --output ~/Movies --title "Inception" --year 2010
-./rip_tv.sh --output ~/TV --title "Breaking Bad" --season 1 --episode-start 1
+# Quick run examples
+dotnet run --project src/MediaEncoding -- --mode movie --output ~/Movies --disc disc:0
+dotnet run --project src/MediaEncoding -- --mode tv --output ~/TV --title "Breaking Bad" --season 1
 ```
 
-### Wrappers
+### Content Mode
 
-- **rip-movie.sh:** Calls the .NET app for movie ripping (use `--output` and optional flags).
-- **rip-tv.sh:** Calls the .NET app for TV season discs (use `--output`, `--season`, `--episode-start`, and optional flags).
+- Use `--mode movie` for feature film discs.
+- Use `--mode tv` for TV season/episode discs.
 
 ### Environment Variables
 
@@ -33,8 +33,8 @@ For automatic online metadata lookup (movie titles, years, TV series info):
 # Set your TMDB API key (get a free key at https://www.themoviedb.org/settings/api)
 export TMDB_API_KEY="your_api_key_here"
 
-# Then the scripts will automatically look up and name files correctly
-./rip_movie.sh --title "inception" --output ~/Movies
+# Then the app will automatically look up and name files correctly
+dotnet run --project src/MediaEncoding -- --mode movie --title "inception" --output ~/Movies
 # Output: Inception (2010).mkv (with correct capitalization and year)
 ```
 
@@ -145,9 +145,10 @@ export OMDB_API_KEY="your_omdb_api_key_here"
    dotnet build src/MediaEncoding
    ```
 
-3. Make wrapper scripts executable:
+3. (Optional) Create aliases for convenience:
    ```bash
-   chmod +x rip_movie.sh rip_tv.sh
+   alias ripmovie='dotnet run --project src/MediaEncoding -- --mode movie'
+   alias riptv='dotnet run --project src/MediaEncoding -- --mode tv'
    ```
 
 4. Verify dependencies are installed:
@@ -162,31 +163,32 @@ export OMDB_API_KEY="your_omdb_api_key_here"
 
 ## Usage
 
-### Usage via Wrappers
+### Direct Usage
 
 ```bash
 # Rip a movie (override output and pass extra args)
-./rip_movie.sh --output ~/Movies --title "The Matrix" --year 1999
+dotnet run --project src/MediaEncoding -- --mode movie --output ~/Movies --title "The Matrix" --year 1999
 
 # Rip a TV season disc
-./rip_tv.sh --output ~/TV --title "Breaking Bad" --season 1 --episode-start 1
+dotnet run --project src/MediaEncoding -- --mode tv --output ~/TV --title "Breaking Bad" --season 1 --episode-start 1
 ```
 
 ### Ripping a Movie
 
-Use the `rip_movie.sh` script for movie discs:
+Use `--mode movie` for movie discs:
 
 ```bash
-./rip_movie.sh --title "Movie Title" --year 2024 --output /path/to/output
+dotnet run --project src/MediaEncoding -- --mode movie --title "Movie Title" --year 2024 --output /path/to/output
 ```
 
 **Options:**
+- `--mode movie|tv` - Content type (movie or TV series)
 - `--disc DISC` - Disc path (default: `disc:0` for first drive)
 - `--output DIR` - Output directory (required)
 - `--temp DIR` - Temporary directory (default: `OUTPUT_DIR/.makemkv`)
-- `--title TITLE` - Movie title for naming
+- `--title TITLE` - Title for naming
 - `--year YEAR` - Release year for naming
- - `--disc-type TYPE` - Override disc type for size estimation (`dvd`, `bd`, `uhd`)
+- `--disc-type TYPE` - Override disc type for size estimation (`dvd`, `bd`, `uhd`)
 
 **Example:**
 ```bash
@@ -202,19 +204,20 @@ This will:
 
 ### Ripping a TV Series
 
-Use the `rip_tv.sh` script for TV series discs:
+Use `--mode tv` for TV series discs:
 
 ```bash
-./rip_tv.sh --title "Show Name" --season 1 --output /path/to/output
+dotnet run --project src/MediaEncoding -- --mode tv --title "Show Name" --season 1 --output /path/to/output
 ```
 
 **Options:**
+- `--mode tv` - Content type TV series
 - `--disc DISC` - Disc path (default: `disc:0`)
 - `--output DIR` - Output directory (required)
 - `--temp DIR` - Temporary directory (default: `OUTPUT_DIR/.makemkv`)
 - `--title TITLE` - TV series title for naming
 - `--season NUM` - Season number (default: 1)
- - `--disc-type TYPE` - Override disc type for size estimation (`dvd`, `bd`, `uhd`)
+- `--disc-type TYPE` - Override disc type for size estimation (`dvd`, `bd`, `uhd`)
 
 **Example:**
 ```bash
@@ -236,32 +239,33 @@ dotnet run --project src/MediaEncoding -- --output /path/to/output [OPTIONS]
 ```
 
 **Options:**
+- `--mode movie|tv` - Content type (preferred)
 - `--disc DISC` - Disc path (default: `disc:0`)
 - `--output DIR` - Output directory (required)
--- `--temp DIR` - Temporary directory
--- `--tv` - Treat as TV series disc
--- `--title TITLE` - Title for naming
--- `--year YEAR` - Year for naming
--- `--season NUM` - Season number for TV series
--- `--episode-start NUM` - Starting episode number for TV
--- `--disc-type TYPE` - Override disc type for size estimation (`dvd`, `bd`, `uhd`)
--- `--debug` - Enable debug logging
+- `--temp DIR` - Temporary directory
+- `--tv` - Treat as TV series disc (deprecated; use `--mode tv`)
+- `--title TITLE` - Title for naming
+- `--year YEAR` - Year for naming
+- `--season NUM` - Season number for TV series
+- `--episode-start NUM` - Starting episode number for TV
+- `--disc-type TYPE` - Override disc type for size estimation (`dvd`, `bd`, `uhd`)
+- `--debug` - Enable debug logging
 
 **Examples:**
 
 Rip a movie with custom disc path:
 ```bash
-dotnet run --project src/MediaEncoding -- --disc /dev/sr0 --title "Inception" --year 2010 --output ~/Movies
+dotnet run --project src/MediaEncoding -- --mode movie --disc /dev/sr0 --title "Inception" --year 2010 --output ~/Movies
 ```
 
 Rip TV series episodes:
 ```bash
-dotnet run --project src/MediaEncoding -- --disc disc:0 --tv --title "Friends" --season 1 --episode-start 1 --output ~/TV
+dotnet run --project src/MediaEncoding -- --mode tv --disc disc:0 --title "Friends" --season 1 --episode-start 1 --output ~/TV
 ```
 
 Force DVD fallback for a TV special (more accurate size estimation when `CINFO:0` is missing):
 ```bash
-./rip_tv.sh --output ~/TV --title "The Cat in the Hat" --year 1971 --disc-type dvd
+dotnet run --project src/MediaEncoding -- --mode tv --output ~/TV --title "The Cat in the Hat" --year 1971 --disc-type dvd
 ```
 
 ### Batch Processing
