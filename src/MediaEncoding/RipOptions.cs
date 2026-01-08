@@ -49,7 +49,7 @@ public class RipOptions
         }
         if (string.IsNullOrEmpty(opts.Temp))
         {
-            opts.Temp = System.IO.Path.Combine(opts.Output, ".makemkv");
+            opts.Temp = Path.Combine(opts.Output, ".makemkv");
         }
         return opts;
     }

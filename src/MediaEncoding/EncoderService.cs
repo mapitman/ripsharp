@@ -78,8 +78,8 @@ public class EncoderService : IEncoderService
 
         args.Append("-map_chapters 0 ");
 
-        // Video encoding per HandBrake mkv preset (x264, slow, film, CRF 20, decomb equivalent)
-        args.Append("-c:v libx264 -preset slow -tune film -crf 20 -pix_fmt yuv420p -vf bwdif=mode=send_frame:parity=auto:deint=interlaced ");
+        // Video encoding per HandBrake mkv preset (x264, slow, CRF 22, decomb equivalent)
+        args.Append("-c:v libx264 -preset slow -crf 22 -pix_fmt yuv420p -vf bwdif=mode=send_frame:parity=auto:deint=interlaced ");
 
         // Audio: copy AAC/AC3/EAC3, otherwise transcode to AAC 512k
         int audioOut = 0;
@@ -93,7 +93,7 @@ public class EncoderService : IEncoderService
             }
             else
             {
-                args.Append($"-c:a:{audioOut} aac -b:a:{audioOut} 512k ");
+                args.Append($"-c:a:{audioOut} aac -b:a:{audioOut} 160k ");
             }
             audioOut++;
         }
@@ -116,32 +116,42 @@ public class EncoderService : IEncoderService
         
         var inputFileName = System.IO.Path.GetFileName(inputFile);
         var outputFileName = System.IO.Path.GetFileName(outputFile);
-        Console.WriteLine($"🎬 Encoding: {inputFileName}");
-        Console.WriteLine($"   → Output: {outputFileName}");
-        Console.WriteLine($"   Settings: x264 preset=slow tune=film CRF=20");
+        AnsiConsole.MarkupLine($"[{ConsoleColors.Info}]🎬 Encoding: {Markup.Escape(inputFileName)}[/]");
+        AnsiConsole.MarkupLine($"[{ConsoleColors.Info}]   → Output: {Markup.Escape(outputFileName)}[/]");
+        AnsiConsole.MarkupLine($"[{ConsoleColors.Muted}]   Settings: x264 preset=slow CRF=22[/]");
         
         var durationMs = (analysis.DurationSeconds ?? 0) * 1000.0;
         var exit = 0;
         
-        await Spectre.Console.AnsiConsole.Progress()
-            .Columns(new Spectre.Console.ProgressColumn[]
+        var durationTicks = (long)(durationMs * TimeSpan.TicksPerMillisecond);
+        
+        await AnsiConsole.Progress()
+            .Columns(new ProgressColumn[]
             {
-                new Spectre.Console.TaskDescriptionColumn(),
-                new Spectre.Console.ProgressBarColumn(),
-                new Spectre.Console.PercentageColumn(),
-                new Spectre.Console.ElapsedTimeColumn
+                new TaskDescriptionColumn(), 
+                new ElapsedTimeColumn
                 {
-                    Style = Color.Green
+                    Style = CustomColors.Highlight
                 },
-                new Spectre.Console.RemainingTimeColumn
+                new ProgressBarColumn
                 {
-                    Style = Color.Yellow
+                    CompletedStyle = CustomColors.Success,
+                    RemainingStyle = CustomColors.Muted
                 },
-                new Spectre.Console.SpinnerColumn(),
+                new PercentageColumn
+                {
+                    Style = CustomColors.Info
+                },
+               
+                new RemainingTimeColumn
+                {
+                    Style = CustomColors.Accent
+                },
+                new SpinnerColumn(),
             })
             .StartAsync(async ctx =>
             {
-                var task = ctx.AddTask("[green]Encoding[/]", maxValue: 100);
+                var task = ctx.AddTask($"[{ConsoleColors.Success}]Encoding (?x)[/]", maxValue: durationTicks);
                 double currentTimeMs = 0;
                 string currentSpeed = "0";
                 
@@ -155,11 +165,11 @@ public class EncoderService : IEncoderService
                         if (e.StartsWith("out_time_us="))
                         {
                             var timeStr = e.Substring("out_time_us=".Length).Trim();
-                            if (double.TryParse(timeStr, out var timeUs) && durationMs > 0)
+                            if (double.TryParse(timeStr, out var timeUs))
                             {
                                 currentTimeMs = timeUs / 1000.0;  // Convert microseconds to milliseconds
-                                var pct = Math.Min(100, (currentTimeMs / durationMs) * 100.0);
-                                task.Value = pct;
+                                var timeTicks = (long)(currentTimeMs * TimeSpan.TicksPerMillisecond);
+                                task.Value = Math.Min(durationTicks, timeTicks);
                             }
                         }
                         else if (e.StartsWith("speed="))
@@ -168,7 +178,7 @@ public class EncoderService : IEncoderService
                             if (!string.IsNullOrEmpty(speed) && speed != "0.00" && speed != "N/A")
                             {
                                 currentSpeed = speed;
-                                task.Description = $"[green]Encoding ({speed}x)[/]";
+                                task.Description = $"[{ConsoleColors.Success}]Encoding ({speed}x)[/]";
                             }
                         }
                         else
@@ -180,13 +190,13 @@ public class EncoderService : IEncoderService
                                 s.StartsWith("dup_frames=") || s.StartsWith("drop_frames=") || s.StartsWith("progress=");
 
                             if (string.IsNullOrWhiteSpace(e) || IsProgressLine(e)) return;
-                            Spectre.Console.AnsiConsole.MarkupLine($"[red]❌ ffmpeg: {Spectre.Console.Markup.Escape(e)}[/]");
+                            AnsiConsole.MarkupLine($"[{ConsoleColors.Error}]❌ ffmpeg: {Markup.Escape(e)}[/]");
                         }
                     });
                 
-                if (exit == 0 && task.Value < 100)
+                if (exit == 0 && task.Value < durationTicks)
                 {
-                    task.Value = 100;
+                    task.Value = durationTicks;
                 }
                 task.StopTask();
             });

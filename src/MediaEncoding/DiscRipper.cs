@@ -31,7 +31,7 @@ public class DiscRipper : IDiscRipper
         var discInfo = await _scanner.ScanDiscAsync(options.Disc);
         if (discInfo == null)
         {
-            Console.Error.WriteLine("Failed to scan disc");
+            AnsiConsole.MarkupLine($"[{ConsoleColors.Error}]Failed to scan disc[/]");
             return new List<string>();
         }
 
@@ -40,16 +40,16 @@ public class DiscRipper : IDiscRipper
         if (string.IsNullOrWhiteSpace(titleForMeta))
         {
             titleForMeta = options.Tv ? "TV Episode" : "Movie";
-            Console.WriteLine($"⚠️ No title specified and disc name unavailable. Using fallback: '{titleForMeta}'");
+            AnsiConsole.MarkupLine($"[{ConsoleColors.Warning}]⚠️ No title specified and disc name unavailable. Using fallback: '{Markup.Escape(titleForMeta)}'[/]");
         }
         var metadata = await _metadata.LookupAsync(titleForMeta, options.Tv, options.Year);
         var titleIds = _scanner.IdentifyMainContent(discInfo, options.Tv);
         if (titleIds.Count == 0)
         {
-            Console.Error.WriteLine("No suitable titles found on disc");
+            AnsiConsole.MarkupLine($"[{ConsoleColors.Error}]No suitable titles found on disc[/]");
             return new List<string>();
         }
-        Console.WriteLine($"📋 Found {titleIds.Count} title(s) to rip: [{string.Join(", ", titleIds)}]");
+        AnsiConsole.MarkupLine($"[{ConsoleColors.Accent}]📋 Found {titleIds.Count} title(s) to rip: [[{string.Join(", ", titleIds)}]][/]");
 
         var totalTitles = titleIds.Count;
         var rippedFilesMap = new Dictionary<int, string>();  // Map titleId -> ripped file path
@@ -68,12 +68,12 @@ public class DiscRipper : IDiscRipper
             if (preExistingRips.Count > 0)
             {
                 var reused = preExistingRips.Dequeue();
-                Console.WriteLine($"↩️ Using existing ripped file for title {idx + 1} of {totalTitles} (Title ID: {titleId}) -> {Path.GetFileName(reused)}");
+                AnsiConsole.MarkupLine($"[{ConsoleColors.Muted}]↩️ Using existing ripped file for title {idx + 1} of {totalTitles} (Title ID: {titleId}) -> {Markup.Escape(Path.GetFileName(reused))}[/]");
                 rippedFilesMap[titleId] = reused;
                 continue;
             }
 
-            Console.WriteLine($"🎬 Ripping title {idx + 1} of {totalTitles} (Title ID: {titleId}){(string.IsNullOrWhiteSpace(titleName) ? "" : $" - {titleName}")}");
+            AnsiConsole.MarkupLine($"[{ConsoleColors.Info}]🎬 Ripping title {idx + 1} of {totalTitles} (Title ID: {titleId}){(string.IsNullOrWhiteSpace(titleName) ? "" : $" - {Markup.Escape(titleName)}")}[/]");
             
             // Track existing files before rip
             var existingFiles = new HashSet<string>(Directory.EnumerateFiles(options.Temp!, "*.mkv"));
@@ -91,16 +91,27 @@ public class DiscRipper : IDiscRipper
                 .Columns(new ProgressColumn[]
                 {
                     new TaskDescriptionColumn(),
+                    new ElapsedTimeColumn
+                    {
+                        Style = Color.Green
+                    },
                     new ProgressBarColumn(),
-                    new PercentageColumn(),
+                    new PercentageColumn{
+                        Style = Color.Yellow
+                    },
+                    new RemainingTimeColumn
+                    {
+                        Style = Color.Blue
+                    },
                     new SpinnerColumn(),
                 })
                 .StartAsync(async ctx =>
                 {
-                    var task = ctx.AddTask($"[green]Title {titleId} ({idx + 1}/{totalTitles})[/]", maxValue: 100);
-                    double lastPct = 0;
                     var titleInfo = discInfo.Titles.FirstOrDefault(t => t.Id == titleId);
                     var expectedBytes = titleInfo?.ReportedSizeBytes ?? 0;
+                    var maxValue = expectedBytes > 0 ? expectedBytes : 100;
+                    var task = ctx.AddTask($"[{ConsoleColors.Success}]Title {titleId} ({idx + 1}/{totalTitles})[/]", maxValue: maxValue);
+                    double lastSize = 0;
                     bool ripDone = false;
 
                     var pollTask = Task.Run(async () =>
@@ -113,9 +124,8 @@ public class DiscRipper : IDiscRipper
                                 if (mkv != null && expectedBytes > 0)
                                 {
                                     var size = new FileInfo(mkv).Length;
-                                    var pct = Math.Min(100.0, Math.Max(lastPct, (size * 100.0) / expectedBytes));
-                                    task.Value = pct;
-                                    lastPct = pct;
+                                    lastSize = Math.Max(lastSize, size);
+                                    task.Value = Math.Min(expectedBytes, lastSize);
                                 }
                             }
                             catch { }
@@ -134,13 +144,12 @@ public class DiscRipper : IDiscRipper
                             {
                                 if (double.TryParse(m.Groups[1].Value, out var raw))
                                 {
-                                    double pct = raw;
-                                    if (pct <= 1.0) pct *= 100.0; // fraction to percent
-                                    while (pct > 100.0) pct /= 10.0; // scale down if 1000-based
-                                    pct = Math.Max(0, Math.Min(100, pct));
-                                    task.Value = pct;
-                                    lastPct = pct;
-                                    try { File.AppendAllText(progressLogPath, $"PRGV {pct:F1}\n"); } catch { }
+                                    double bytesProcessed = raw;
+                                    if (expectedBytes > 0 && bytesProcessed <= 1.0) bytesProcessed *= expectedBytes; // fraction -> bytes
+                                    bytesProcessed = Math.Max(0, expectedBytes > 0 ? Math.Min(expectedBytes, bytesProcessed) : bytesProcessed);
+                                    task.Value = bytesProcessed;
+                                    lastSize = bytesProcessed;
+                                    try { File.AppendAllText(progressLogPath, $"PRGV {bytesProcessed:F0}\n"); } catch { }
                                 }
                             }
                         }
@@ -149,7 +158,7 @@ public class DiscRipper : IDiscRipper
                             var caption = ExtractQuoted(line);
                             if (!string.IsNullOrEmpty(caption))
                             {
-                                task.Description = $"[green]{caption} ({idx + 1}/{totalTitles})[/]";
+                                task.Description = $"[{ConsoleColors.Success}]{caption} ({idx + 1}/{totalTitles})[/]";
                             }
                             try { File.AppendAllText(progressLogPath, $"PRGC {caption}\n"); } catch { }
                         }
@@ -159,7 +168,7 @@ public class DiscRipper : IDiscRipper
                     {
                         if (!(errLine.StartsWith("PRGV:") || errLine.StartsWith("PRGC:")))
                         {
-                            Console.Error.WriteLine(errLine);
+                            AnsiConsole.MarkupLine($"[{ConsoleColors.Error}]{Markup.Escape(errLine)}[/]");
                         }
                         HandleMakemkvLine(errLine);
                     });
@@ -168,15 +177,15 @@ public class DiscRipper : IDiscRipper
 
                     if (exit != 0)
                     {
-                        task.Description = $"[red]Failed: Title {titleId}[/]";
+                        task.Description = $"[{ConsoleColors.Error}]Failed: Title {titleId}[/]";
                         task.StopTask();
-                        Console.Error.WriteLine($"Failed to rip title {titleId}");
+                        AnsiConsole.MarkupLine($"[{ConsoleColors.Error}]Failed to rip title {titleId}[/]");
                         return;
                     }
 
-                    if (lastPct < 100)
+                    if (lastSize < maxValue)
                     {
-                        task.Value = 100;
+                        task.Value = maxValue;
                     }
                     task.StopTask();
                 });
@@ -197,7 +206,7 @@ public class DiscRipper : IDiscRipper
         {
             if (!rippedFilesMap.TryGetValue(titleId, out var src))
             {
-                Console.Error.WriteLine($"No ripped file found for title {titleId}");
+                AnsiConsole.MarkupLine($"[{ConsoleColors.Error}]No ripped file found for title {titleId}[/]");
                 continue;
             }
             
@@ -231,8 +240,8 @@ public class DiscRipper : IDiscRipper
             }
         }
 
-        Console.WriteLine($"Processing complete. Output files: {finalFiles.Count}");
-        foreach (var f in finalFiles) Console.WriteLine(f);
+        AnsiConsole.MarkupLine($"[{ConsoleColors.Success}]Processing complete. Output files: {finalFiles.Count}[/]");
+        foreach (var f in finalFiles) AnsiConsole.WriteLine(Markup.Escape(f));
         return finalFiles;
     }
 

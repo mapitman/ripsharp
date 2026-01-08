@@ -29,11 +29,11 @@ public class DiscScanner : IDiscScanner
             // Show relevant scanning progress and info
             if (line.StartsWith("MSG:") && line.Contains("insert disc"))
             {
-                Spectre.Console.AnsiConsole.MarkupLine("[yellow]💿 Insert a disc into the drive...[/]");
+                Spectre.Console.AnsiConsole.MarkupLine($"[{ConsoleColors.Warning}]💿 Insert a disc into the drive...[/]");
             }
             else if (line.StartsWith("DRV:0,") && !line.Contains(",256,") && !discDetectedPrinted)
             {
-                Spectre.Console.AnsiConsole.MarkupLine("[green]📀 Disc detected in drive...[/]");
+                Spectre.Console.AnsiConsole.MarkupLine($"[{ConsoleColors.Success}]📀 Disc detected in drive...[/]");
                 discDetectedPrinted = true;
             }
             else if (line.StartsWith("MSG:1005,"))
@@ -41,23 +41,23 @@ public class DiscScanner : IDiscScanner
                 // MakeMKV started message
                 var msg = ExtractQuoted(line);
                 if (!string.IsNullOrWhiteSpace(msg))
-                    Spectre.Console.AnsiConsole.MarkupLine($"[dim]▸ {Spectre.Console.Markup.Escape(msg)}[/]");
+                    Spectre.Console.AnsiConsole.MarkupLine($"[{ConsoleColors.Muted}]▸ {Spectre.Console.Markup.Escape(msg)}[/]");
             }
             else if (line.StartsWith("MSG:1011,") || line.StartsWith("MSG:3007,"))
             {
                 // LibreDrive mode or direct disc access
                 var msg = ExtractQuoted(line);
                 if (!string.IsNullOrWhiteSpace(msg))
-                    Spectre.Console.AnsiConsole.MarkupLine($"[dim]▸ {Spectre.Console.Markup.Escape(msg)}[/]");
+                    Spectre.Console.AnsiConsole.MarkupLine($"[{ConsoleColors.Muted}]▸ {Spectre.Console.Markup.Escape(msg)}[/]");
             }
             else if (line.StartsWith("MSG:5085,"))
             {
                 // Content hash table loaded
-                Spectre.Console.AnsiConsole.MarkupLine("[dim]▸ Loaded content hash table[/]");
+                Spectre.Console.AnsiConsole.MarkupLine($"[{ConsoleColors.Muted}]▸ Loaded content hash table[/]");
             }
             else if (line.StartsWith("MSG:") && (line.Contains("Scanning") || line.Contains("scanning")) && !scanningStarted)
             {
-                Spectre.Console.AnsiConsole.MarkupLine("[blue]🔍 Scanning disc structure...[/]");
+                Spectre.Console.AnsiConsole.MarkupLine($"[{ConsoleColors.Info}]🔍 Scanning disc structure...[/]");
                 scanningStarted = true;
             }
             else if (line.StartsWith("MSG:3307,"))
@@ -68,7 +68,7 @@ public class DiscScanner : IDiscScanner
                 var titleMatch = System.Text.RegularExpressions.Regex.Match(line, @"title #(\d+)");
                 if (fileMatch.Success && titleMatch.Success)
                 {
-                    Spectre.Console.AnsiConsole.MarkupLine($"[dim green]  ✓ Added title #{titleMatch.Groups[1].Value}: {fileMatch.Groups[1].Value}[/]");
+                    Spectre.Console.AnsiConsole.MarkupLine($"[{ConsoleColors.Success}]  ✓ Added title #{titleMatch.Groups[1].Value}: {fileMatch.Groups[1].Value}[/]");
                 }
             }
             else if (line.StartsWith("MSG:3309,"))
@@ -77,7 +77,7 @@ public class DiscScanner : IDiscScanner
                 var match = System.Text.RegularExpressions.Regex.Match(line, @"""Title ([^\s]+) is equal");
                 if (match.Success)
                 {
-                    Spectre.Console.AnsiConsole.MarkupLine($"[dim]  ~ Skipped duplicate: {match.Groups[1].Value}[/]");
+                    Spectre.Console.AnsiConsole.MarkupLine($"[{ConsoleColors.Muted}]  ~ Skipped duplicate: {match.Groups[1].Value}[/]");
                 }
             }
             else if (line.StartsWith("MSG:3025,"))
@@ -86,19 +86,19 @@ public class DiscScanner : IDiscScanner
                 var match = System.Text.RegularExpressions.Regex.Match(line, @"""Title #([^\s]+)");
                 if (match.Success)
                 {
-                    Spectre.Console.AnsiConsole.MarkupLine($"[dim]  - Skipped short: {match.Groups[1].Value}[/]");
+                    Spectre.Console.AnsiConsole.MarkupLine($"[{ConsoleColors.Muted}]  - Skipped short: {match.Groups[1].Value}[/]");
                 }
             }
             else if (line.StartsWith("MSG:") && (line.Contains("error") || line.Contains("fail")))
             {
-                Spectre.Console.AnsiConsole.MarkupLine($"[red]❌ {Spectre.Console.Markup.Escape(line)}[/]");
+                Spectre.Console.AnsiConsole.MarkupLine($"[{ConsoleColors.Error}]❌ {Spectre.Console.Markup.Escape(line)}[/]");
             }
             else if (line.StartsWith("CINFO:1,"))
             {
                 var dtype = ExtractQuoted(line);
                 if (!string.IsNullOrWhiteSpace(dtype))
                 {
-                    Spectre.Console.AnsiConsole.MarkupLine($"[cyan]💽 Disc type: [bold]{Spectre.Console.Markup.Escape(dtype)}[/][/]");
+                    Spectre.Console.AnsiConsole.MarkupLine($"[{ConsoleColors.Accent}]💽 Disc type: [bold]{Spectre.Console.Markup.Escape(dtype)}[/][/]");
                 }
             }
             else if (line.StartsWith("TINFO:"))
@@ -111,7 +111,7 @@ public class DiscScanner : IDiscScanner
                     var tname = ExtractQuoted(line);
                     if (!string.IsNullOrWhiteSpace(tname) && printedTitles.Add(tname!))
                     {
-                        Spectre.Console.AnsiConsole.MarkupLine($"[magenta]🎞️ Title found: [bold]{Spectre.Console.Markup.Escape(tname)}[/][/]");
+                        Spectre.Console.AnsiConsole.MarkupLine($"[{ConsoleColors.Highlight}]🎞️ Title found: [bold]{Spectre.Console.Markup.Escape(tname)}[/][/]");
                     }
                 }
             }
@@ -171,7 +171,7 @@ public class DiscScanner : IDiscScanner
 
         if (titleAddedCount > 0)
         {
-            Spectre.Console.AnsiConsole.MarkupLine($"[green]✓ Scan complete - found {titleAddedCount} title(s)[/]");
+            Spectre.Console.AnsiConsole.MarkupLine($"[{ConsoleColors.Success}]✓ Scan complete - found {titleAddedCount} title(s)[/]");
         }
 
         info.DiscName = discName ?? string.Empty;

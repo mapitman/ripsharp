@@ -7,6 +7,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using NetEscapades.Configuration.Yaml;
+using Spectre.Console;
 
 namespace MediaEncoding;
 
@@ -38,16 +39,16 @@ public class Program
 
         if (files.Count > 0)
         {
-            Console.WriteLine("Success! Files created:");
+            AnsiConsole.MarkupLine($"[{ConsoleColors.Success}]Success! Files created:[/]");
             foreach (var f in files)
             {
-                Console.WriteLine(f);
+                AnsiConsole.WriteLine(Markup.Escape(f));
             }
             return 0;
         }
         else
         {
-            Console.Error.WriteLine("Failed to process disc");
+            AnsiConsole.MarkupLine($"[{ConsoleColors.Error}]Failed to process disc[/]");
             return 1;
         }
     }
