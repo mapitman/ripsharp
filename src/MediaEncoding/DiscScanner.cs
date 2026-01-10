@@ -8,176 +8,40 @@ namespace MediaEncoding;
 public class DiscScanner : IDiscScanner
 {
     private readonly IProcessRunner _runner;
-    public DiscScanner(IProcessRunner runner)
+    private readonly IProgressNotifier _notifier;
+
+    public DiscScanner(IProcessRunner runner, IProgressNotifier notifier)
     {
         _runner = runner;
+        _notifier = notifier;
     }
 
     public async Task<DiscInfo?> ScanDiscAsync(string discPath)
     {
-        var info = new DiscInfo();
         var titles = new List<TitleInfo>();
-        string? discName = null;
-        string? discType = null;
+        var handler = new ScanOutputHandler(_notifier, titles);
 
-        bool discDetectedPrinted = false;
-        bool scanningStarted = false;
-        int titleAddedCount = 0;
-        var printedTitles = new HashSet<string>();
-        var exit = await _runner.RunAsync("makemkvcon", $"-r --robot info {discPath}", onOutput: line =>
-        {
-            // Show relevant scanning progress and info
-            if (line.StartsWith("MSG:") && line.Contains("insert disc"))
-            {
-                Spectre.Console.AnsiConsole.MarkupLine($"[{ConsoleColors.Warning}]💿 Insert a disc into the drive...[/]");
-            }
-            else if (line.StartsWith("DRV:0,") && !line.Contains(",256,") && !discDetectedPrinted)
-            {
-                Spectre.Console.AnsiConsole.MarkupLine($"[{ConsoleColors.Success}]📀 Disc detected in drive...[/]");
-                discDetectedPrinted = true;
-            }
-            else if (line.StartsWith("MSG:1005,"))
-            {
-                // MakeMKV started message
-                var msg = MakeMkvProtocol.ExtractQuoted(line);
-                if (!string.IsNullOrWhiteSpace(msg))
-                    Spectre.Console.AnsiConsole.MarkupLine($"[{ConsoleColors.Muted}]▸ {Spectre.Console.Markup.Escape(msg)}[/]");
-            }
-            else if (line.StartsWith("MSG:1011,") || line.StartsWith("MSG:3007,"))
-            {
-                // LibreDrive mode or direct disc access
-                var msg = MakeMkvProtocol.ExtractQuoted(line);
-                if (!string.IsNullOrWhiteSpace(msg))
-                    Spectre.Console.AnsiConsole.MarkupLine($"[{ConsoleColors.Muted}]▸ {Spectre.Console.Markup.Escape(msg)}[/]");
-            }
-            else if (line.StartsWith("MSG:5085,"))
-            {
-                // Content hash table loaded
-                Spectre.Console.AnsiConsole.MarkupLine($"[{ConsoleColors.Muted}]▸ Loaded content hash table[/]");
-            }
-            else if (line.StartsWith("MSG:") && (line.Contains("Scanning") || line.Contains("scanning")) && !scanningStarted)
-            {
-                Spectre.Console.AnsiConsole.MarkupLine($"[{ConsoleColors.Info}]🔍 Scanning disc structure...[/]");
-                scanningStarted = true;
-            }
-            else if (line.StartsWith("MSG:3307,"))
-            {
-                // File was added as title - show which file
-                titleAddedCount++;
-                var fileMatch = System.Text.RegularExpressions.Regex.Match(line, @"""File ([^\s]+)");
-                var titleMatch = System.Text.RegularExpressions.Regex.Match(line, @"title #(\d+)");
-                if (fileMatch.Success && titleMatch.Success)
-                {
-                    Spectre.Console.AnsiConsole.MarkupLine($"[{ConsoleColors.Success}]  ✓ Added title #{titleMatch.Groups[1].Value}: {fileMatch.Groups[1].Value}[/]");
-                }
-            }
-            else if (line.StartsWith("MSG:3309,"))
-            {
-                // Duplicate title skipped - show at lower priority
-                var match = System.Text.RegularExpressions.Regex.Match(line, @"""Title ([^\s]+) is equal");
-                if (match.Success)
-                {
-                    Spectre.Console.AnsiConsole.MarkupLine($"[{ConsoleColors.Muted}]  ~ Skipped duplicate: {match.Groups[1].Value}[/]");
-                }
-            }
-            else if (line.StartsWith("MSG:3025,"))
-            {
-                // Short title skipped - extract file name and show occasionally
-                var match = System.Text.RegularExpressions.Regex.Match(line, @"""Title #([^\s]+)");
-                if (match.Success)
-                {
-                    Spectre.Console.AnsiConsole.MarkupLine($"[{ConsoleColors.Muted}]  - Skipped short: {match.Groups[1].Value}[/]");
-                }
-            }
-            else if (line.StartsWith("MSG:") && (line.Contains("error") || line.Contains("fail")))
-            {
-                Spectre.Console.AnsiConsole.MarkupLine($"[{ConsoleColors.Error}]❌ {Spectre.Console.Markup.Escape(line)}[/]");
-            }
-            else if (line.StartsWith("CINFO:1,"))
-            {
-                var dtype = MakeMkvProtocol.ExtractQuoted(line);
-                if (!string.IsNullOrWhiteSpace(dtype))
-                {
-                    Spectre.Console.AnsiConsole.MarkupLine($"[{ConsoleColors.Accent}]💽 Disc type: [bold]{Spectre.Console.Markup.Escape(dtype)}[/][/]");
-                }
-            }
-            else if (line.StartsWith("TINFO:"))
-            {
-                // TINFO format: TINFO:<titleId>,<fieldId>,<flags>,"<value>"
-                // Field 2 is the title name
-                var parts = line.Split(new[] { ',' }, 4);
-                if (parts.Length >= 4 && parts[1] == "2")
-                {
-                    var tname = MakeMkvProtocol.ExtractQuoted(line);
-                    if (!string.IsNullOrWhiteSpace(tname) && printedTitles.Add(tname!))
-                    {
-                        Spectre.Console.AnsiConsole.MarkupLine($"[{ConsoleColors.Highlight}]🎞️ Title found: [bold]{Spectre.Console.Markup.Escape(tname)}[/][/]");
-                    }
-                }
-            }
-
-            // Parse protocol lines for disc info (non-display logic)
-            if (line.StartsWith("CINFO:1,"))
-            {
-                // CINFO:1 contains disc type (DVD, Blu-ray disc, etc.)
-                discType = MakeMkvProtocol.ExtractQuoted(line) ?? discType;
-            }
-            else if (line.StartsWith("CINFO:2,") && string.IsNullOrEmpty(discName))
-            {
-                // CINFO:2 contains disc name/title
-                discName = MakeMkvProtocol.ExtractQuoted(line);
-            }
-            else if (line.StartsWith("DRV:"))
-            {
-                // ignore
-            }
-            else if (line.StartsWith("TINFO:"))
-            {
-                // Parse TINFO lines: TINFO:<titleId>,<attributeId>,<flags>,"<value>"
-                // Field 2 = title name, Field 9 = duration, Field 10 = size string, Field 11 = size bytes
-                var match = Regex.Match(line, @"TINFO:(\d+),(\d+),");
-                if (match.Success)
-                {
-                    var id = int.Parse(match.Groups[1].Value);
-                    var fieldId = int.Parse(match.Groups[2].Value);
-                    if (!titles.Exists(t => t.Id == id)) titles.Add(new TitleInfo { Id = id });
-                    var title = titles.Find(x => x.Id == id)!;
-                    switch (fieldId)
-                    {
-                        case 2: // Title name
-                            var name = MakeMkvProtocol.ExtractQuoted(line);
-                            if (!string.IsNullOrWhiteSpace(name))
-                            {
-                                title.Name = name;
-                                if (discName == null)
-                                    discName = name;
-                            }
-                            break;
-                        case 9: // Duration (HH:MM:SS format)
-                            var durStr = MakeMkvProtocol.ExtractQuoted(line);
-                            title.DurationSeconds = ParseDurationToSeconds(durStr);
-                            break;
-                        case 11: // Size in bytes
-                            var sizeStr = MakeMkvProtocol.ExtractQuoted(line);
-                            if (long.TryParse(sizeStr, out var bytes))
-                                title.ReportedSizeBytes = bytes;
-                            break;
-                    }
-                }
-            }
-        });
+        var exit = await _runner.RunAsync("makemkvcon", $"-r --robot info {discPath}",
+            onOutput: handler.HandleLine);
 
         if (exit != 0) return null;
 
-        if (titleAddedCount > 0)
+        if (handler.TitleAddedCount > 0)
         {
-            Spectre.Console.AnsiConsole.MarkupLine($"[{ConsoleColors.Success}]✓ Scan complete - found {titleAddedCount} title(s)[/]");
+            _notifier.Success($"✓ Scan complete - found {handler.TitleAddedCount} title(s)");
         }
 
-        info.DiscName = discName ?? string.Empty;
-        info.DiscType = NormalizeDiscType(discType);
-        info.Titles = titles;
-        return info;
+        return BuildDiscInfo(handler.DiscName, handler.DiscType, titles);
+    }
+
+    private static DiscInfo BuildDiscInfo(string? discName, string? discType, List<TitleInfo> titles)
+    {
+        return new DiscInfo
+        {
+            DiscName = discName ?? string.Empty,
+            DiscType = NormalizeDiscType(discType),
+            Titles = titles
+        };
     }
 
     public List<int> IdentifyMainContent(DiscInfo info, bool isTv)

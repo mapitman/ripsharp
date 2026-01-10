@@ -80,7 +80,7 @@ private static string? ExtractQuoted(string line)
 
 ---
 
-### 3. **DiscScanner Has Mixed Responsibilities**
+### ~~3. **DiscScanner Has Mixed Responsibilities**~~ ✅ **COMPLETED**
 
 **Location:** [src/MediaEncoding/DiscScanner.cs](src/MediaEncoding/DiscScanner.cs)
 
@@ -98,13 +98,21 @@ The method contains complex inline callbacks with 150+ lines of parsing logic.
 - `ScanProgressPresenter` - Console output formatting
 - Keep `DiscScanner` focused on orchestrating the scan operation
 
+**Resolution:** ✅ Completed in branch `refactor/discscanner-srp`
+- Created `ScanOutputHandler.cs` to separate parsing from UI concerns
+- Injected `IProgressNotifier` into `DiscScanner` for console output abstraction
+- Reduced `ScanDiscAsync` from 249 lines to ~20 lines focused on orchestration
+- Extracted `BuildDiscInfo()` method for data model creation
+- `ScanOutputHandler` handles all protocol parsing (CINFO, TINFO, MSG, DRV)
+- All console output now uses `IProgressNotifier` interface instead of direct `AnsiConsole` calls
+
 ---
 
-### 4. ~~**Console Output Scattered Throughout Business Logic**~~ ✅ **PARTIALLY COMPLETED**
+### ~~4. **Console Output Scattered Throughout Business Logic**~~ ✅ **PARTIALLY COMPLETED**
 
 **Locations:**
-- [src/MediaEncoding/DiscRipper.cs](src/MediaEncoding/DiscRipper.cs) - 20+ `AnsiConsole.MarkupLine` calls
-- [src/MediaEncoding/DiscScanner.cs](src/MediaEncoding/DiscScanner.cs) - 15+ `AnsiConsole.MarkupLine` calls
+- ~~[src/MediaEncoding/DiscRipper.cs](src/MediaEncoding/DiscRipper.cs)~~ ✅ - Uses `IProgressNotifier`
+- ~~[src/MediaEncoding/DiscScanner.cs](src/MediaEncoding/DiscScanner.cs)~~ ✅ - Uses `IProgressNotifier`
 - [src/MediaEncoding/EncoderService.cs](src/MediaEncoding/EncoderService.cs) - 5+ `AnsiConsole.MarkupLine` calls
 - [src/MediaEncoding/MetadataService.cs](src/MediaEncoding/MetadataService.cs) - 3+ `AnsiConsole.MarkupLine` calls
 
@@ -119,12 +127,12 @@ The method contains complex inline callbacks with 150+ lines of parsing logic.
 - Inject the notifier into services instead of directly using `AnsiConsole`
 - This allows for testing, alternative UIs, and silent modes
 
-**Resolution:** ✅ Partially completed in branch `refactor/discripper-srp`
+**Resolution:** ✅ Partially completed in branches `refactor/discripper-srp` and `refactor/discscanner-srp`
 - Created `IProgressNotifier` interface with methods: Info, Success, Warning, Error, Muted, Accent, Highlight, Plain
-- Implemented `ConsoleProgressNotifier` that wraps Spectre.Console AnsiConsole calls
-- Registered in DI and injected into `DiscRipper`
-- Updated `DiscRipper` to use `_notifier` instead of direct `AnsiConsole` calls
-- **Remaining:** `DiscScanner`, `EncoderService`, and `MetadataService` still use direct console output
+- Implemented `ConsoleProgressNotifier` with Spectre.Console integration
+- Migrated `DiscRipper` and `DiscScanner` to use `IProgressNotifier`
+- Registered in DI container
+- **Remaining**: EncoderService and MetadataService still use direct AnsiConsole calls
 
 ---
 
@@ -148,10 +156,10 @@ The method contains complex inline callbacks with 150+ lines of parsing logic.
   - `RipTitle()` - the ripping loop body
   - `EncodeAndRenameRippedFiles()`
   
-- **DiscScanner.ScanDiscAsync**: Extract methods:
-  - `ParseProtocolLine()`
-  - `HandleProgressMessage()`
-  - `BuildDiscInfo()`
+- ~~**DiscScanner.ScanDiscAsync**~~: ✅ Extract methods:
+  - ~~`ParseProtocolLine()`~~ - Extracted to `ScanOutputHandler`
+  - ~~`HandleProgressMessage()`~~ - Extracted to `ScanOutputHandler`
+  - ~~`BuildDiscInfo()`~~ - Extracted as separate method
   
 - **EncoderService.EncodeAsync**: Extract methods:
   - `BuildFfmpegArguments()`
@@ -160,8 +168,9 @@ The method contains complex inline callbacks with 150+ lines of parsing logic.
 
 **Resolution:** ✅ Partially completed in branch `refactor/discripper-srp`
 - Decomposed `DiscRipper.ProcessDiscAsync()` into: `PrepareDirectories()`, `ScanDiscAndLookupMetadata()`, `IdentifyTitlesToRip()`, `RipTitlesAsync()`, `EncodeAndRenameAsync()`
-- Main method now reads as clear orchestration workflow
-- **Remaining:** `DiscScanner.ScanDiscAsync()` and `EncoderService.EncodeAsync()` still need decomposition
+- Decomposed `DiscScanner.ScanDiscAsync()` by extracting parsing/UI to `ScanOutputHandler` and data building to `BuildDiscInfo()`
+- Main methods now read as clear orchestration workflows
+- **Remaining:** `EncoderService.EncodeAsync()` still needs decomposition
 
 ---
 
