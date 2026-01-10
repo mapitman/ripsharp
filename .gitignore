@@ -483,10 +483,7 @@ $RECYCLE.BIN/
 # Vim temporary swap files
 *.swp
 
-# MediaEncoding local artifacts (do not commit large test outputs)
-# Entire local test rip directory
-test_rip/
 # Any MakeMKV working directories anywhere
 **/.makemkv/
 # MKV files produced under test_rip (avoid accidental commits)
-test_rip/**/*.mkv
+*.mkv
