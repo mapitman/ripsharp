@@ -38,8 +38,14 @@ public class DiscRipper : IDiscRipper
         _notifier.Accent($"Found {titleIds.Count} title(s) to rip: [{string.Join(", ", titleIds)}]");
 
         var rippedFilesMap = await RipTitlesAsync(discInfo, titleIds, options);
-        var finalFiles = await EncodeAndRenameAsync(discInfo, titleIds, rippedFilesMap, metadata!, options);
 
+        if (metadata is null)
+        {
+            _notifier.Error("Metadata lookup failed; unable to encode and rename titles.");
+            return new List<string>();
+        }
+
+        var finalFiles = await EncodeAndRenameAsync(discInfo, titleIds, rippedFilesMap, metadata, options);
         _notifier.Success($"Processing complete. Output files: {finalFiles.Count}");
         foreach (var f in finalFiles) _notifier.Plain(f);
         return finalFiles;
