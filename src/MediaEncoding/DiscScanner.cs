@@ -39,14 +39,14 @@ public class DiscScanner : IDiscScanner
             else if (line.StartsWith("MSG:1005,"))
             {
                 // MakeMKV started message
-                var msg = ExtractQuoted(line);
+                var msg = MakeMkvProtocol.ExtractQuoted(line);
                 if (!string.IsNullOrWhiteSpace(msg))
                     Spectre.Console.AnsiConsole.MarkupLine($"[{ConsoleColors.Muted}]▸ {Spectre.Console.Markup.Escape(msg)}[/]");
             }
             else if (line.StartsWith("MSG:1011,") || line.StartsWith("MSG:3007,"))
             {
                 // LibreDrive mode or direct disc access
-                var msg = ExtractQuoted(line);
+                var msg = MakeMkvProtocol.ExtractQuoted(line);
                 if (!string.IsNullOrWhiteSpace(msg))
                     Spectre.Console.AnsiConsole.MarkupLine($"[{ConsoleColors.Muted}]▸ {Spectre.Console.Markup.Escape(msg)}[/]");
             }
@@ -95,7 +95,7 @@ public class DiscScanner : IDiscScanner
             }
             else if (line.StartsWith("CINFO:1,"))
             {
-                var dtype = ExtractQuoted(line);
+                var dtype = MakeMkvProtocol.ExtractQuoted(line);
                 if (!string.IsNullOrWhiteSpace(dtype))
                 {
                     Spectre.Console.AnsiConsole.MarkupLine($"[{ConsoleColors.Accent}]💽 Disc type: [bold]{Spectre.Console.Markup.Escape(dtype)}[/][/]");
@@ -108,7 +108,7 @@ public class DiscScanner : IDiscScanner
                 var parts = line.Split(new[] { ',' }, 4);
                 if (parts.Length >= 4 && parts[1] == "2")
                 {
-                    var tname = ExtractQuoted(line);
+                    var tname = MakeMkvProtocol.ExtractQuoted(line);
                     if (!string.IsNullOrWhiteSpace(tname) && printedTitles.Add(tname!))
                     {
                         Spectre.Console.AnsiConsole.MarkupLine($"[{ConsoleColors.Highlight}]🎞️ Title found: [bold]{Spectre.Console.Markup.Escape(tname)}[/][/]");
@@ -120,12 +120,12 @@ public class DiscScanner : IDiscScanner
             if (line.StartsWith("CINFO:1,"))
             {
                 // CINFO:1 contains disc type (DVD, Blu-ray disc, etc.)
-                discType = ExtractQuoted(line) ?? discType;
+                discType = MakeMkvProtocol.ExtractQuoted(line) ?? discType;
             }
             else if (line.StartsWith("CINFO:2,") && string.IsNullOrEmpty(discName))
             {
                 // CINFO:2 contains disc name/title
-                discName = ExtractQuoted(line);
+                discName = MakeMkvProtocol.ExtractQuoted(line);
             }
             else if (line.StartsWith("DRV:"))
             {
@@ -145,7 +145,7 @@ public class DiscScanner : IDiscScanner
                     switch (fieldId)
                     {
                         case 2: // Title name
-                            var name = ExtractQuoted(line);
+                            var name = MakeMkvProtocol.ExtractQuoted(line);
                             if (!string.IsNullOrWhiteSpace(name))
                             {
                                 title.Name = name;
@@ -154,11 +154,11 @@ public class DiscScanner : IDiscScanner
                             }
                             break;
                         case 9: // Duration (HH:MM:SS format)
-                            var durStr = ExtractQuoted(line);
+                            var durStr = MakeMkvProtocol.ExtractQuoted(line);
                             title.DurationSeconds = ParseDurationToSeconds(durStr);
                             break;
                         case 11: // Size in bytes
-                            var sizeStr = ExtractQuoted(line);
+                            var sizeStr = MakeMkvProtocol.ExtractQuoted(line);
                             if (long.TryParse(sizeStr, out var bytes))
                                 title.ReportedSizeBytes = bytes;
                             break;
@@ -210,11 +210,7 @@ public class DiscScanner : IDiscScanner
         }
     }
 
-    private static string? ExtractQuoted(string line)
-    {
-        var m = Regex.Match(line, "\"([^\"]+)\"");
-        return m.Success ? m.Groups[1].Value : null;
-    }
+    
 
     private static int ParseDurationToSeconds(string? s)
     {

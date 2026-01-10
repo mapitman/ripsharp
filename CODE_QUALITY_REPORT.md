@@ -11,7 +11,7 @@ This report identifies areas where code can be improved through better separatio
 
 ## Issues & Recommendations
 
-### 1. **DiscRipper Class Violates Single Responsibility Principle**
+### 1. ~~**DiscRipper Class Violates Single Responsibility Principle**~~ ✅ **COMPLETED**
 
 **Location:** [src/MediaEncoding/DiscRipper.cs](src/MediaEncoding/DiscRipper.cs)
 
@@ -22,16 +22,26 @@ This report identifies areas where code can be improved through better separatio
 - File encoding coordination
 - File naming and sanitization
 
-**Impact:** High - Makes the class difficult to test, maintain, and understand
+**Impact:** High - Makes the class difficult to test, maintain, and understand  
+**Related GitHub issue:** [#3](https://github.com/mapitman/media-encoding/issues/3)
 
 **Recommendation:** Extract the following into separate classes:
 - `MakeMkvProgressParser` - Handles parsing of MakeMKV robot protocol output (PRGV, PRGC messages)
 - `FileNamingService` - Handles file naming conventions and sanitization
 - `RipProgressTracker` - Manages progress reporting during rip operations
 
+**Resolution:** ✅ Completed in branch `refactor/discripper-srp`
+- Created `MakeMkvProtocol` utility class for quote extraction
+- Created `FileNaming` utility class with `SanitizeFileName` and `RenameFile` methods
+- Created `MakeMkvOutputHandler` class to encapsulate PRGV/PRGC parsing and progress updates
+- Created `IMakeMkvService` interface and `MakeMkvService` implementation to encapsulate makemkvcon invocation
+- Decomposed `ProcessDiscAsync()` into focused methods: `PrepareDirectories()`, `ScanDiscAndLookupMetadata()`, `IdentifyTitlesToRip()`, `RipTitlesAsync()`, `EncodeAndRenameAsync()`
+- All dependencies now injected via constructor (IDiscScanner, IEncoderService, IMetadataService, IMakeMkvService, IProgressNotifier)
+- Verified working with successful test rip
+
 ---
 
-### 2. **Duplicate String Extraction Logic**
+### 2. ~~**Duplicate String Extraction Logic**~~ ✅ **COMPLETED**
 
 **Locations:**
 - [src/MediaEncoding/DiscRipper.cs](src/MediaEncoding/DiscRipper.cs#L286)
@@ -58,9 +68,15 @@ private static string? ExtractQuoted(string line)
 }
 ```
 
-**Impact:** Medium - Code duplication and inconsistent implementations
+**Impact:** Medium - Code duplication and inconsistent implementations  
+**Related GitHub issue:** [#4](https://github.com/mapitman/media-encoding/issues/4)
 
 **Recommendation:** Create a shared `MakeMkvProtocolParser` utility class with common parsing methods.
+
+**Resolution:** ✅ Completed in branch `refactor/discripper-srp`
+- Created `MakeMkvProtocol` utility class with shared `ExtractQuoted()` method using regex
+- Updated both `DiscRipper` and `DiscScanner` to use `MakeMkvProtocol.ExtractQuoted()`
+- Removed duplicate private methods from both classes
 
 ---
 
@@ -84,7 +100,7 @@ The method contains complex inline callbacks with 150+ lines of parsing logic.
 
 ---
 
-### 4. **Console Output Scattered Throughout Business Logic**
+### 4. ~~**Console Output Scattered Throughout Business Logic**~~ ✅ **PARTIALLY COMPLETED**
 
 **Locations:**
 - [src/MediaEncoding/DiscRipper.cs](src/MediaEncoding/DiscRipper.cs) - 20+ `AnsiConsole.MarkupLine` calls
@@ -94,7 +110,8 @@ The method contains complex inline callbacks with 150+ lines of parsing logic.
 
 **Issue:** UI concerns (console output) are tightly coupled with business logic, making classes hard to test and reuse.
 
-**Impact:** High - Reduces testability and violates separation of concerns
+**Impact:** High - Reduces testability and violates separation of concerns  
+**Related GitHub issue:** [#5](https://github.com/mapitman/media-encoding/issues/5)
 
 **Recommendation:** Implement a logging/notification abstraction:
 - Create `IProgressNotifier` interface
@@ -102,16 +119,24 @@ The method contains complex inline callbacks with 150+ lines of parsing logic.
 - Inject the notifier into services instead of directly using `AnsiConsole`
 - This allows for testing, alternative UIs, and silent modes
 
+**Resolution:** ✅ Partially completed in branch `refactor/discripper-srp`
+- Created `IProgressNotifier` interface with methods: Info, Success, Warning, Error, Muted, Accent, Highlight, Plain
+- Implemented `ConsoleProgressNotifier` that wraps Spectre.Console AnsiConsole calls
+- Registered in DI and injected into `DiscRipper`
+- Updated `DiscRipper` to use `_notifier` instead of direct `AnsiConsole` calls
+- **Remaining:** `DiscScanner`, `EncoderService`, and `MetadataService` still use direct console output
+
 ---
 
-### 5. **Long Methods Need Decomposition**
+### 5. ~~**Long Methods Need Decomposition**~~ ✅ **PARTIALLY COMPLETED**
 
 **Locations:**
 - [src/MediaEncoding/DiscRipper.cs](src/MediaEncoding/DiscRipper.cs#L26-L241) - `ProcessDiscAsync` method (215 lines)
 - [src/MediaEncoding/DiscScanner.cs](src/MediaEncoding/DiscScanner.cs#L14-L171) - `ScanDiscAsync` method (157 lines)
 - [src/MediaEncoding/EncoderService.cs](src/MediaEncoding/EncoderService.cs#L47-L205) - `EncodeAsync` method (158 lines)
 
-**Issue:** These methods are too long and handle multiple concerns within a single method body.
+**Issue:** These methods are too long and handle multiple concerns within a single method body.  
+**Related GitHub issue:** [#6](https://github.com/mapitman/media-encoding/issues/6)
 
 **Impact:** Medium - Reduces readability and makes testing difficult
 
@@ -133,9 +158,14 @@ The method contains complex inline callbacks with 150+ lines of parsing logic.
   - `SelectStreams()`
   - `HandleEncodingProgress()`
 
+**Resolution:** ✅ Partially completed in branch `refactor/discripper-srp`
+- Decomposed `DiscRipper.ProcessDiscAsync()` into: `PrepareDirectories()`, `ScanDiscAndLookupMetadata()`, `IdentifyTitlesToRip()`, `RipTitlesAsync()`, `EncodeAndRenameAsync()`
+- Main method now reads as clear orchestration workflow
+- **Remaining:** `DiscScanner.ScanDiscAsync()` and `EncoderService.EncodeAsync()` still need decomposition
+
 ---
 
-### 6. **Duplicate File Sanitization Logic**
+### 6. ~~**Duplicate File Sanitization Logic**~~ ✅ **COMPLETED**
 
 **Locations:**
 - [src/MediaEncoding/DiscRipper.cs](src/MediaEncoding/DiscRipper.cs#L275-L280) - `SanitizeFileName` method
@@ -146,6 +176,11 @@ The method contains complex inline callbacks with 150+ lines of parsing logic.
 **Impact:** Low - Limited reusability
 
 **Recommendation:** Move to a shared `FileNamingService` or utility class.
+
+**Resolution:** ✅ Completed in branch `refactor/discripper-srp`
+- Created `FileNaming` static utility class with `SanitizeFileName()` and `RenameFile()` methods
+- Updated `DiscRipper` to use `FileNaming.SanitizeFileName()` and `FileNaming.RenameFile()`
+- Removed duplicate methods from `DiscRipper`
 
 ---
 
