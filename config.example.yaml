@@ -1,0 +1,34 @@
+# Example configuration file for media encoding
+# Copy this to config.yaml and customize as needed
+
+disc:
+  default_path: "disc:0"
+  default_temp_dir: "/tmp/makemkv"
+
+output:
+  movies_dir: "~/Movies"
+  tv_dir: "~/TV Shows"
+
+encoding:
+  include_english_subtitles: true
+  include_stereo_audio: true
+  include_surround_audio: true
+  min_movie_duration_seconds: 2700
+  min_episode_duration_seconds: 1200
+  max_episode_duration_seconds: 3600
+
+naming:
+  movie_format: "{title} ({year}).mkv"
+  tv_format: "{title} - S{season:02d}E{episode:02d}.mkv"
+
+metadata:
+  # Enable online metadata lookup
+  lookup_enabled: true
+  
+  # TMDB API key for movie and TV series metadata
+  # RECOMMENDED: Set via environment variable TMDB_API_KEY for better security
+  # Example: export TMDB_API_KEY="your_api_key_here"
+  # 
+  # Alternatively, you can set it here (not recommended for security):
+  # Get your free API key at: https://www.themoviedb.org/settings/api
+  tmdb_api_key: ""
