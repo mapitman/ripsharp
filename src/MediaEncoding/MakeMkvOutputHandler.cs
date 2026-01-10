@@ -32,18 +32,15 @@ public class MakeMkvOutputHandler
         if (line.StartsWith("PRGV:"))
         {
             var m = Regex.Match(line, @"PRGV:\s*([0-9]+(?:\.[0-9]+)?)");
-            if (m.Success)
+            if (m.Success && double.TryParse(m.Groups[1].Value, out var raw))
             {
-                if (double.TryParse(m.Groups[1].Value, out var raw))
-                {
-                    double bytesProcessed = raw;
-                    if (_expectedBytes > 0 && bytesProcessed <= 1.0)
-                        bytesProcessed *= _expectedBytes; // fraction -> bytes
-                    bytesProcessed = Math.Max(0, _expectedBytes > 0 ? Math.Min(_expectedBytes, bytesProcessed) : bytesProcessed);
-                    _task.Value = bytesProcessed;
-                    LastBytesProcessed = bytesProcessed;
-                    TryAppend(_progressLogPath, $"PRGV {bytesProcessed:F0}\n");
-                }
+                double bytesProcessed = raw;
+                if (_expectedBytes > 0 && bytesProcessed <= 1.0)
+                    bytesProcessed *= _expectedBytes; // fraction -> bytes
+                bytesProcessed = Math.Max(0, _expectedBytes > 0 ? Math.Min(_expectedBytes, bytesProcessed) : bytesProcessed);
+                _task.Value = bytesProcessed;
+                LastBytesProcessed = bytesProcessed;
+                TryAppend(_progressLogPath, $"PRGV {bytesProcessed:F0}\n");
             }
         }
         else if (line.StartsWith("PRGC:"))
