@@ -189,7 +189,7 @@ public class DiscTypeDetectorTests
             }
         };
 
-        var (isTV, confidence) = detector.DetectContentType(disc);
+        var (isTV, _) = detector.DetectContentType(disc);
 
         // AnalyzeTwoTitles should return uncertain/low confidence for potential TV episodes
         // Since they're similar length and in TV range, it's uncertain
