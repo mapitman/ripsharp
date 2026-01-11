@@ -91,6 +91,7 @@ public class DiscRipper : IDiscRipper
             var titleId = titleIds[idx];
             var titleInfo = discInfo.Titles.FirstOrDefault(t => t.Id == titleId);
             var titleName = titleInfo?.Name;
+            var durationStr = FormatDuration(titleInfo?.DurationSeconds ?? 0);
 
             if (preExistingRips.Count > 0)
             {
@@ -100,7 +101,7 @@ public class DiscRipper : IDiscRipper
                 continue;
             }
 
-            _notifier.Info($"Ripping title {idx + 1} of {totalTitles} (Title ID: {titleId}){(string.IsNullOrWhiteSpace(titleName) ? "" : $" - {titleName}")}");
+            _notifier.Info($"Ripping title {idx + 1} of {totalTitles} (Title ID: {titleId}){(string.IsNullOrWhiteSpace(titleName) ? "" : $" - {titleName}")} [{durationStr}]");
             var existingFiles = new HashSet<string>(Directory.EnumerateFiles(options.Temp!, "*.mkv"));
             var progressLogPath = Path.Combine(options.Temp!, $"progress_title_{titleId:D2}.log");
             if (File.Exists(progressLogPath)) File.Delete(progressLogPath);
@@ -226,5 +227,20 @@ public class DiscRipper : IDiscRipper
         return finalFiles;
     }
 
+    private static string FormatDuration(int seconds)
+    {
+        if (seconds <= 0)
+            return "Unknown duration";
 
+        int hours = seconds / 3600;
+        int minutes = (seconds % 3600) / 60;
+        int secs = seconds % 60;
+
+        if (hours > 0)
+            return $"{hours}h {minutes}m {secs}s";
+        else if (minutes > 0)
+            return $"{minutes}m {secs}s";
+        else
+            return $"{secs}s";
+    }
 }
