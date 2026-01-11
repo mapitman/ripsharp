@@ -168,7 +168,7 @@ public class DiscTypeDetectorTests
             }
         };
 
-        var (isTV, confidence) = detector.DetectContentType(disc);
+        var (_, confidence) = detector.DetectContentType(disc);
 
         // Should handle zero durations without throwing division by zero
         // null is acceptable for zero-duration titles (uncertain)
