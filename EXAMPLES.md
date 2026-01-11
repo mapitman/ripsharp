@@ -77,13 +77,13 @@ make rip-tv OUTPUT=~/TV EXTRA_ARGS='--title "Breaking Bad" --season 1'
 
 ```bash
 # Basic movie rip
-./rip_movie.sh --title "The Matrix" --year 1999 --output ~/Movies
+dotnet run --project src/MediaEncoding -- --mode movie --title "The Matrix" --year 1999 --output ~/Movies
 
 # Movie with custom disc path
-./rip_movie.sh --disc /dev/sr0 --title "Inception" --year 2010 --output ~/Movies
+dotnet run --project src/MediaEncoding -- --mode movie --disc /dev/sr0 --title "Inception" --year 2010 --output ~/Movies
 
 # Movie with custom temp directory
-./rip_movie.sh --title "The Dark Knight" --year 2008 \
+dotnet run --project src/MediaEncoding -- --mode movie --title "The Dark Knight" --year 2008 \
     --output ~/Movies --temp /mnt/scratch/temp
 ```
 
@@ -91,107 +91,18 @@ make rip-tv OUTPUT=~/TV EXTRA_ARGS='--title "Breaking Bad" --season 1'
 
 ```bash
 # Basic TV series rip (Season 1)
-./rip_tv.sh --title "Breaking Bad" --season 1 --output ~/TV
+dotnet run --project src/MediaEncoding -- --mode tv --title "Breaking Bad" --season 1 --output ~/TV
 
 # TV series Season 2
-./rip_tv.sh --title "Breaking Bad" --season 2 --output ~/TV
+dotnet run --project src/MediaEncoding -- --mode tv --title "Breaking Bad" --season 2 --output ~/TV
 
 # TV series with custom disc path
-./rip_tv.sh --disc disc:1 --title "Friends" --season 1 --output ~/TV
+dotnet run --project src/MediaEncoding -- --mode tv --disc disc:1 --title "Friends" --season 1 --output ~/TV
 ```
 
 ## Advanced Examples
 
-### Online Metadata Lookup
 
-Using TMDB for automatic metadata retrieval:
-
-```bash
-# Set API key via environment variable first (recommended)
-export TMDB_API_KEY="your_api_key_here"
-
-# Movie with online lookup (approximation of title is fine)
-./rip_disc.py --config config.yaml --output ~/Movies --title "dark knight"
-# TMDB will find: The Dark Knight (2008).mkv
-
-# TV series with online lookup
-./rip_disc.py --config config.yaml --output ~/TV --tv --title "game of thrones" --season 1
-# TMDB will find: Game of Thrones - S01E01.mkv, etc.
-
-# If year is ambiguous, provide it for better matching
-./rip_disc.py --config config.yaml --output ~/Movies --title "dune" --year 2021
-# Ensures you get Dune (2021) not Dune (1984)
-
-# Works without config file if environment variable is set
-export TMDB_API_KEY="your_api_key_here"
-./rip_disc.py --output ~/Movies --title "inception"
-# Output: Inception (2010).mkv
-```
-
-**Benefits of online metadata lookup:**
-- Correct capitalization and formatting
-- Accurate release years
-- Proper series names
-- Genre information (stored in metadata)
-- Plot summaries and ratings
-
-**Security Note:** Using environment variables for API keys is more secure than storing them in config files, as environment variables won't be accidentally committed to version control.
-
-### Using the Python Script Directly
-
-```bash
-# Movie with debug logging
-./rip_disc.py --output ~/Movies \
-    --title "Blade Runner" --year 1982 --debug
-
-# TV series with all options
-./rip_disc.py --disc /dev/sr0 \
-    --output ~/TV --temp /tmp/rip \
-    --tv --title "The Wire" --season 1 --debug
-
-# Movie from second optical drive
-./rip_disc.py --disc disc:1 \
-    --title "Avatar" --year 2009 \
-    --output /mnt/media/Movies
-```
-
-## Batch Processing Examples
-
-### Multiple Movies
-
-Edit `batch_rip_movies.sh` and add your movie list:
-
-```bash
-MOVIES=(
-    "The Matrix:1999"
-    "The Matrix Reloaded:2003"
-    "The Matrix Revolutions:2003"
-)
-```
-
-Then run:
-
-```bash
-./batch_rip_movies.sh
-```
-
-The script will prompt you to insert each disc in sequence.
-
-### TV Series Complete Season
-
-Edit `batch_rip_tv_season.sh`:
-
-```bash
-SERIES_TITLE="Breaking Bad"
-SEASON_NUMBER=1
-NUM_DISCS=3  # Number of discs in season 1
-```
-
-Then run:
-
-```bash
-./batch_rip_tv_season.sh
-```
 
 ## Specific Scenarios
 
@@ -200,7 +111,7 @@ Then run:
 The script automatically handles UltraHD discs:
 
 ```bash
-./rip_movie.sh --title "Blade Runner 2049" --year 2017 \
+dotnet run --project src/MediaEncoding -- --mode movie --title "Blade Runner 2049" --year 2017 \
     --output ~/Movies/4K
 ```
 

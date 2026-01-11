@@ -192,7 +192,7 @@ dotnet run --project src/MediaEncoding -- --mode movie --title "Movie Title" --y
 
 **Example:**
 ```bash
-./rip_movie.sh --title "The Matrix" --year 1999 --output ~/Movies
+dotnet run --project src/MediaEncoding -- --mode movie --title "The Matrix" --year 1999 --output ~/Movies
 ```
 
 This will:
@@ -221,7 +221,7 @@ dotnet run --project src/MediaEncoding -- --mode tv --title "Show Name" --season
 
 **Example:**
 ```bash
-./rip_tv.sh --title "Breaking Bad" --season 1 --output ~/TV
+dotnet run --project src/MediaEncoding -- --mode tv --title "Breaking Bad" --season 1 --output ~/TV
 ```
 
 This will:
@@ -268,30 +268,6 @@ Force DVD fallback for a TV special (more accurate size estimation when `CINFO:0
 dotnet run --project src/MediaEncoding -- --mode tv --output ~/TV --title "The Cat in the Hat" --year 1971 --disc-type dvd
 ```
 
-### Batch Processing
-
-For processing multiple discs in sequence, use the batch scripts:
-
-**Batch Movie Ripping:**
-```bash
-# Edit batch_rip_movies.sh to add your movie list
-nano batch_rip_movies.sh
-
-# Then run the batch script
-./batch_rip_movies.sh
-```
-
-**Batch TV Season Ripping:**
-```bash
-# Edit batch_rip_tv_season.sh to configure your series
-nano batch_rip_tv_season.sh
-
-# Then run the batch script
-./batch_rip_tv_season.sh
-```
-
-The batch scripts will prompt you to insert each disc in sequence, making it easy to process your entire collection.
-
 **More Examples:** See [EXAMPLES.md](EXAMPLES.md) for comprehensive usage examples including 4K UHD, multiple drives, network storage, and more.
 
 ## How It Works
@@ -328,8 +304,7 @@ The ripping system integrates multiple tools and services:
 
 ```mermaid
 flowchart LR
-   User["User<br/>Terminal"] --> Script["rip_movie.sh<br/>or<br/>rip_tv.sh"]
-   Script --> App[".NET app<br/>src/MediaEncoding"]
+   User["User<br/>Terminal"] --> App[".NET app<br/>src/MediaEncoding"]
    App --> MakeMKV["makemkvcon<br/>Disc Scanning"]
    App --> FFmpeg["ffmpeg<br/>Track Selection"]
    App --> TMDB["TMDB API<br/>Metadata Lookup"]
@@ -340,7 +315,6 @@ flowchart LR
    OMDB --> Output
     
    style User fill:#e3f2fd,color:#000
-   style Script fill:#fff3e0,color:#000
    style App fill:#e8f5e9,color:#000
    style Output fill:#fce4ec,color:#000
 ```
@@ -354,13 +328,11 @@ When you run the wrapper scripts, this is the flow:
 sequenceDiagram
    participant User
    participant Terminal
-   participant Wrapper as Wrapper Script
    participant App as .NET App
    participant Tools as MakeMKV/FFmpeg
     
-   User->>Terminal: ./rip_tv.sh (or rip_movie.sh)
-   Terminal->>Wrapper: Execute
-   Wrapper->>App: dotnet run -- ...
+   User->>Terminal: dotnet run --project src/MediaEncoding -- ...
+   Terminal->>App: Execute
    App->>Tools: makemkvcon / ffmpeg
    Tools-->>App: Output MKV files
    App-->>Terminal: List output files
