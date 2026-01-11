@@ -55,8 +55,15 @@ public class Program
             })
             .Build();
 
-        var ripper = host.Services.GetRequiredService<IDiscRipper>();
         var options = RipOptions.ParseArgs(args);
+        
+        if (options.ShowHelp)
+        {
+            RipOptions.DisplayHelp();
+            return 0;
+        }
+        
+        var ripper = host.Services.GetRequiredService<IDiscRipper>();
         var files = await ripper.ProcessDiscAsync(options);
 
         if (files.Count > 0)

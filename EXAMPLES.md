@@ -122,32 +122,30 @@ Note: UltraHD rips can be 40-100GB and take 1-3 hours.
 For standard DVDs:
 
 ```bash
-./rip_movie.sh --title "The Godfather" --year 1972 \
-    --output ~/Movies/DVDs
+dotnet run --project src/MediaEncoding -- rip --title "The Godfather" --year 1972 \
+    --output ~/Movies/DVDs --mode movie
 ```
 
 DVDs are typically 4-8GB and take 10-30 minutes.
 
 ### Multiple Audio/Subtitle Languages
 
-The script defaults to English tracks. To customize, edit `rip_disc.py` and modify the `encode_file()` method.
+The application defaults to English tracks. To customize language preferences, rebuild the application with modified language codes in `IEncoderService` implementation.
 
-For example, to include Spanish audio:
+For example, to include Spanish audio, modify the language filter in the encoder service:
 
-```python
-# Around line 470, change:
-if language in ('eng', 'en', '') or not language:
-# To:
-if language in ('eng', 'en', 'spa', 'es', '') or not language:
+```csharp
+// In EncoderService.cs, modify language selection logic
+// to include Spanish ('spa', 'es')
 ```
 
 ### Anime / Foreign Films
 
-For non-English content, you may want to modify the subtitle selection:
+For non-English content, you can customize subtitle selection in the source code or manually process files with ffmpeg after the initial rip:
 
 ```bash
-# Edit rip_disc.py to include all subtitle tracks
-# or manually specify tracks using ffmpeg after initial rip
+# Manually specify tracks using ffmpeg after initial rip
+ffmpeg -i input.mkv -c copy -m language:fra output.mkv  # Keep French tracks
 ```
 
 ## Working with Multiple Drives
@@ -156,22 +154,22 @@ If you have multiple optical drives:
 
 ```bash
 # Terminal 1: Rip from first drive
-./rip_movie.sh --disc disc:0 --title "Movie A" --output ~/Movies
+dotnet run --project src/MediaEncoding -- rip --disc disc:0 --title "Movie A" --output ~/Movies --mode movie
 
 # Terminal 2: Simultaneously rip from second drive
-./rip_movie.sh --disc disc:1 --title "Movie B" --output ~/Movies
+dotnet run --project src/MediaEncoding -- rip --disc disc:1 --title "Movie B" --output ~/Movies --mode movie
 ```
 
 Make sure to use different temporary directories:
 
 ```bash
 # Terminal 1
-./rip_movie.sh --disc disc:0 --temp /tmp/makemkv0 \
-    --title "Movie A" --output ~/Movies
+dotnet run --project src/MediaEncoding -- rip --disc disc:0 --temp /tmp/makemkv0 \
+    --title "Movie A" --output ~/Movies --mode movie
 
 # Terminal 2
-./rip_movie.sh --disc disc:1 --temp /tmp/makemkv1 \
-    --title "Movie B" --output ~/Movies
+dotnet run --project src/MediaEncoding -- rip --disc disc:1 --temp /tmp/makemkv1 \
+    --title "Movie B" --output ~/Movies --mode movie
 ```
 
 ## Network/NAS Storage
@@ -183,11 +181,11 @@ For output to network storage:
 mount /mnt/nas
 
 # Then rip to it
-./rip_movie.sh --title "Movie" --year 2024 --output /mnt/nas/Movies
+dotnet run --project src/MediaEncoding -- rip --title "Movie" --year 2024 --output /mnt/nas/Movies --mode movie
 
 # Use local temp directory for better performance
-./rip_movie.sh --title "Movie" --year 2024 \
-    --output /mnt/nas/Movies --temp /tmp/makemkv
+dotnet run --project src/MediaEncoding -- rip --title "Movie" --year 2024 \
+    --output /mnt/nas/Movies --temp /tmp/makemkv --mode movie
 ```
 
 ## Troubleshooting Examples
@@ -234,12 +232,12 @@ Output directly to Plex directories:
 
 ```bash
 # Movies
-./rip_movie.sh --title "Movie Name" --year 2024 \
-    --output "/var/lib/plexmediaserver/Library/Movies"
+dotnet run --project src/MediaEncoding -- rip --title "Movie Name" --year 2024 \
+    --output "/var/lib/plexmediaserver/Library/Movies" --mode movie
 
 # TV Shows
-./rip_tv.sh --title "Show Name" --season 1 \
-    --output "/var/lib/plexmediaserver/Library/TV Shows"
+dotnet run --project src/MediaEncoding -- rip --title "Show Name" --season 1 \
+    --output "/var/lib/plexmediaserver/Library/TV Shows" --mode tv
 ```
 
 ### Jellyfin
@@ -247,8 +245,8 @@ Output directly to Plex directories:
 Similar structure for Jellyfin:
 
 ```bash
-./rip_movie.sh --title "Movie Name" --year 2024 \
-    --output "/var/lib/jellyfin/movies"
+dotnet run --project src/MediaEncoding -- rip --title "Movie Name" --year 2024 \
+    --output "/var/lib/jellyfin/movies" --mode movie
 
 ./rip_tv.sh --title "Show Name" --season 1 \
     --output "/var/lib/jellyfin/shows"
@@ -267,11 +265,11 @@ Not recommended for interactive disc insertion, but possible for ISO files:
 
 ### Post-Processing Hook
 
-Add to the end of `rip_disc.py` to trigger post-processing:
+After successful rip, you can trigger custom post-processing via shell scripts or system commands:
 
-```python
-# After successful rip
-subprocess.run(['/usr/local/bin/notify.sh', 'Rip complete', title])
+```bash
+# Trigger notification or post-processing
+/usr/local/bin/notify.sh "Rip complete" "$title"
 ```
 
 ## Performance Examples
