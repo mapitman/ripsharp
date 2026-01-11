@@ -15,14 +15,16 @@ public class DiscRipper : IDiscRipper
     private readonly IMetadataService _metadata;
     private readonly IProgressNotifier _notifier;
     private readonly IMakeMkvService _makeMkv;
+    private readonly IUserPrompt _userPrompt;
 
-    public DiscRipper(IDiscScanner scanner, IEncoderService encoder, IMetadataService metadata, IMakeMkvService makeMkv, IProgressNotifier notifier)
+    public DiscRipper(IDiscScanner scanner, IEncoderService encoder, IMetadataService metadata, IMakeMkvService makeMkv, IProgressNotifier notifier, IUserPrompt userPrompt)
     {
         _scanner = scanner;
         _encoder = encoder;
         _metadata = metadata;
         _makeMkv = makeMkv;
         _notifier = notifier;
+        _userPrompt = userPrompt;
     }
 
     public async Task<List<string>> ProcessDiscAsync(RipOptions options)
@@ -67,18 +69,31 @@ public class DiscRipper : IDiscRipper
         }
 
         // Use auto-detected content type if requested
-        if (options.AutoDetect && discInfo.DetectedContentType.HasValue)
+        if (options.AutoDetect)
         {
-            var contentType = discInfo.DetectedContentType.Value ? "TV series" : "movie";
-            var emoji = discInfo.DetectedContentType.Value ? "\ud83d\udcfa " : "\ud83c\udfac "; // 📺 for TV, 🎬 for movie
-            var confidencePercent = (int)(discInfo.DetectionConfidence * 100);
-            _notifier.Info($"{emoji}Detected as {contentType} (confidence: {confidencePercent}%)");
-            options.Tv = discInfo.DetectedContentType.Value;
-        }
-        else if (options.AutoDetect)
-        {
-            _notifier.Warning($"Could not confidently detect content type. Defaulting to movie. Consider specifying --mode explicitly.");
-            options.Tv = false;
+            const double minConfidenceThreshold = 0.70;
+            
+            if (discInfo.DetectedContentType.HasValue && discInfo.DetectionConfidence >= minConfidenceThreshold)
+            {
+                var contentType = discInfo.DetectedContentType.Value ? "TV series" : "movie";
+                var emoji = discInfo.DetectedContentType.Value ? "\ud83d\udcfa " : "\ud83c\udfac "; // 📺 for TV, 🎬 for movie
+                var confidencePercent = (int)(discInfo.DetectionConfidence * 100);
+                _notifier.Info($"{emoji}Detected as {contentType} (confidence: {confidencePercent}%)");
+                options.Tv = discInfo.DetectedContentType.Value;
+            }
+            else
+            {
+                // Low confidence or uncertain - prompt user
+                string? detectionHint = null;
+                if (discInfo.DetectedContentType.HasValue)
+                {
+                    var contentType = discInfo.DetectedContentType.Value ? "TV series" : "movie";
+                    var confidencePercent = (int)(discInfo.DetectionConfidence * 100);
+                    detectionHint = $"detected as {contentType} with {confidencePercent}% confidence";
+                }
+                
+                options.Tv = _userPrompt.PromptForContentType(detectionHint);
+            }
         }
 
         var titleForMeta = options.Title ?? discInfo.DiscName;

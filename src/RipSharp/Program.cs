@@ -27,6 +27,7 @@ public class Program
             {
                 services.Configure<AppConfig>(ctx.Configuration);
                 services.AddSingleton<IProgressNotifier, ConsoleProgressNotifier>();
+                services.AddSingleton<IUserPrompt, ConsoleUserPrompt>();
                 services.AddSingleton<IProcessRunner, ProcessRunner>();
                 services.AddSingleton<IMakeMkvService, MakeMkvService>();
                 services.AddSingleton<IDiscScanner, DiscScanner>();
