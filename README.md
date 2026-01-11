@@ -19,8 +19,7 @@ dotnet run --project src/RipSharp -- --help
 ```bash
 export TMDB_API_KEY="your_key_here"
 export OMDB_API_KEY="your_key_here"
-# Optional: TVDB (for episode titles) — implementation in progress (issue #37)
-export TVDB_API_KEY="your_key_here"
+export TVDB_API_KEY="your_key_here"  # For TV episode titles
 ```
 
 ### 4) Rip a movie (mode optional; auto-detect is default)
@@ -61,8 +60,9 @@ dotnet run --project src/RipSharp -- --output ~/TV --mode tv --title "Breaking B
 This will:
 1. Scan the disc
 2. Identify all episodes (20-50 minutes each)
-3. Rip each episode with English audio/subtitles
-4. Save as `~/TV/Breaking Bad - S01E01.mkv`, `~/TV/Breaking Bad - S01E02.mkv`, etc.
+3. Look up episode titles from TVDB (if API key provided)
+4. Rip each episode with English audio/subtitles
+5. Save as `~/TV/Breaking Bad - S01E01 - Pilot.mkv`, etc.
 
 ## Command-Line Options
 
@@ -87,7 +87,7 @@ This will:
 ```bash
 export TMDB_API_KEY="your_tmdb_api_key"      # Primary metadata source
 export OMDB_API_KEY="your_omdb_api_key"      # Fallback metadata source
-export TVDB_API_KEY="your_tvdb_api_key"      # TV episode titles (in progress)
+export TVDB_API_KEY="your_tvdb_api_key"      # TV episode titles
 ```
 
 To make permanent, add to `~/.bashrc`, `~/.zshrc`, or equivalent:
@@ -142,6 +142,7 @@ metadata:
 4. **API Keys** (Optional but recommended)
    - **TMDB**: https://www.themoviedb.org/settings/api (free)
    - **OMDB**: https://www.omdbapi.com/apikey.aspx (free tier available)
+   - **TVDB**: https://thetvdb.com/api-information (free for personal use)
 
 ### Hardware Requirements
 
@@ -173,7 +174,7 @@ The application:
 
 1. **Scans disc** - Uses `makemkvcon` to identify all titles and their properties
 2. **Identifies content** - Finds the main feature (movies) or episodes (TV series)
-3. **Looks up metadata** - Queries OMDB then TMDB for official titles and years
+3. **Looks up metadata** - Queries OMDB then TMDB for official titles and years; queries TVDB for TV episode titles
 4. **Rips titles** - Extracts using MakeMKV at highest available quality
 5. **Selects tracks** - Includes English audio and subtitles only
 6. **Renames & saves** - Moves to output directory with proper naming
@@ -183,8 +184,10 @@ The application:
 **Movies:** `Title (Year).mkv`  
 Example: `The Matrix (1999).mkv`
 
-**TV Series:** `Show Name - S##E##.mkv`  
-Example: `Breaking Bad - S01E01.mkv`, `Breaking Bad - S01E02.mkv`
+**TV Series:** `Show Name - S##E## - Episode Title.mkv`  
+Example: `Breaking Bad - S01E01 - Pilot.mkv`, `The Legend of Korra - S01E01 - Welcome to Republic City.mkv`
+
+**Note:** Episode titles are included when `TVDB_API_KEY` is set. Falls back to `S##E##` format without titles.
 
 ### Track Selection
 
