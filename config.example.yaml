@@ -32,3 +32,8 @@ metadata:
   # Alternatively, you can set it here (not recommended for security):
   # Get your free API key at: https://www.themoviedb.org/settings/api
   tmdb_api_key: ""
+
+  # TVDB API key for TV series and episode title lookups
+  # RECOMMENDED: Set via environment variable TVDB_API_KEY
+  # Note: Implementation in progress (issue #37)
+  tvdb_api_key: ""

@@ -12,7 +12,7 @@ public static class FileNaming
         return s.Trim();
     }
 
-    public static string RenameFile(string filePath, Metadata metadata, int? episodeNum, int seasonNum, string? versionSuffix = null)
+    public static string RenameFile(string filePath, Metadata metadata, int? episodeNum, int seasonNum, string? versionSuffix = null, string? episodeTitle = null)
     {
         var title = metadata.Title.Trim();
         var year = metadata.Year;
@@ -22,7 +22,8 @@ public static class FileNaming
         string filename;
         if (mediaType == "tv" && episodeNum.HasValue)
         {
-            filename = $"{safeTitle} - S{seasonNum:00}E{episodeNum.Value:00}.mkv";
+            var safeEpisodeTitle = string.IsNullOrWhiteSpace(episodeTitle) ? "" : $" - {SanitizeFileName(episodeTitle)}";
+            filename = $"{safeTitle} - S{seasonNum:00}E{episodeNum.Value:00}{safeEpisodeTitle}.mkv";
         }
         else
         {

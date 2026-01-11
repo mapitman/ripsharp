@@ -52,7 +52,7 @@ public class EncoderService : IEncoderService
         return new FileAnalysis { Streams = streams, DurationSeconds = durationSeconds };
     }
 
-    public async Task<bool> EncodeAsync(string inputFile, string outputFile, bool includeEnglishSubtitles)
+    public async Task<bool> EncodeAsync(string inputFile, string outputFile, bool includeEnglishSubtitles, int ordinal, int total)
     {
         var analysis = await AnalyzeAsync(inputFile);
         if (analysis == null) return false;
@@ -60,24 +60,24 @@ public class EncoderService : IEncoderService
         var selected = SelectStreams(analysis, includeEnglishSubtitles);
         var ffmpegArgs = BuildFfmpegArguments(inputFile, outputFile, selected);
 
-        DisplayEncodingInfo(inputFile, outputFile);
+        DisplayEncodingInfo(inputFile, outputFile, ordinal, total);
 
         var durationTicks = (long)((analysis.DurationSeconds ?? 0) * 1000.0 * TimeSpan.TicksPerMillisecond);
-        var exit = await RunEncodingWithProgress(ffmpegArgs, durationTicks);
+        var exit = await RunEncodingWithProgress(ffmpegArgs, durationTicks, ordinal, total);
 
         return exit == 0;
     }
 
-    private void DisplayEncodingInfo(string inputFile, string outputFile)
+    private void DisplayEncodingInfo(string inputFile, string outputFile, int ordinal, int total)
     {
         var inputFileName = System.IO.Path.GetFileName(inputFile);
         var outputFileName = System.IO.Path.GetFileName(outputFile);
-        _notifier.Info($"🎬 Encoding: {inputFileName}");
+        _notifier.Info($"🎬 Encoding ({ordinal}/{total}): {inputFileName}");
         _notifier.Info($"   → Output: {outputFileName}");
         _notifier.Muted("   Settings: x264 preset=slow CRF=22");
     }
 
-    private async Task<int> RunEncodingWithProgress(string ffmpegArgs, long durationTicks)
+    private async Task<int> RunEncodingWithProgress(string ffmpegArgs, long durationTicks, int ordinal, int total)
     {
         var exit = 0;
 
@@ -97,11 +97,11 @@ public class EncoderService : IEncoderService
             })
             .StartAsync(async ctx =>
             {
-                var task = ctx.AddTask($"[{ConsoleColors.Success}]Encoding (?x)[/]", maxValue: durationTicks);
+                var task = ctx.AddTask($"[{ConsoleColors.Success}]Encoding ({ordinal}/{total})[/]", maxValue: durationTicks);
 
                 exit = await _runner.RunAsync("ffmpeg", ffmpegArgs,
                     onOutput: _ => { },  // ffmpeg stdout - not used with -progress pipe:2
-                    onError: line => HandleEncodingProgress(line, task, durationTicks));
+                    onError: line => HandleEncodingProgress(line, task, durationTicks, ordinal, total));
 
                 if (exit == 0 && task.Value < durationTicks)
                 {
@@ -113,7 +113,7 @@ public class EncoderService : IEncoderService
         return exit;
     }
 
-    private static void HandleEncodingProgress(string line, Spectre.Console.ProgressTask task, long durationTicks)
+    private static void HandleEncodingProgress(string line, Spectre.Console.ProgressTask task, long durationTicks, int ordinal, int total)
     {
         // Progress lines come in key=value format on stderr
         // Use out_time_us (microseconds) for accurate progress tracking
@@ -132,7 +132,7 @@ public class EncoderService : IEncoderService
             var speed = line.Substring("speed=".Length).TrimEnd('x');
             if (!string.IsNullOrEmpty(speed) && speed != "0.00" && speed != "N/A")
             {
-                task.Description = $"[{ConsoleColors.Success}]Encoding ({speed}x)[/]";
+                task.Description = $"[{ConsoleColors.Success}]Encoding ({ordinal}/{total}, {speed}x)[/]";
             }
         }
         else

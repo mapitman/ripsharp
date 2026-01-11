@@ -34,4 +34,5 @@ public class MetadataConfig
     public bool Lookup_Enabled { get; set; } = true;
     public string? Omdb_Api_Key { get; set; }
     public string? Tmdb_Api_Key { get; set; }
+    public string? Tvdb_Api_Key { get; set; }
 }

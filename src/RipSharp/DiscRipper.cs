@@ -16,8 +16,9 @@ public class DiscRipper : IDiscRipper
     private readonly IProgressNotifier _notifier;
     private readonly IMakeMkvService _makeMkv;
     private readonly IUserPrompt _userPrompt;
+    private readonly ITvEpisodeTitleProvider _episodeTitles;
 
-    public DiscRipper(IDiscScanner scanner, IEncoderService encoder, IMetadataService metadata, IMakeMkvService makeMkv, IProgressNotifier notifier, IUserPrompt userPrompt)
+    public DiscRipper(IDiscScanner scanner, IEncoderService encoder, IMetadataService metadata, IMakeMkvService makeMkv, IProgressNotifier notifier, IUserPrompt userPrompt, ITvEpisodeTitleProvider episodeTitles)
     {
         _scanner = scanner;
         _encoder = encoder;
@@ -25,6 +26,7 @@ public class DiscRipper : IDiscRipper
         _makeMkv = makeMkv;
         _notifier = notifier;
         _userPrompt = userPrompt;
+        _episodeTitles = episodeTitles;
     }
 
     public async Task<List<string>> ProcessDiscAsync(RipOptions options)
@@ -154,20 +156,28 @@ public class DiscRipper : IDiscRipper
                 {
                     var expectedBytes = titleInfo?.ReportedSizeBytes ?? 0;
                     var maxValue = expectedBytes > 0 ? expectedBytes : 100;
-                    var task = ctx.AddTask($"[{ConsoleColors.Success}]Title {titleId} ({idx + 1}/{totalTitles})[/]", maxValue: maxValue);
+                    var task = ctx.AddTask($"[{ConsoleColors.Success}]Title {idx + 1} ({idx + 1}/{totalTitles})[/]", maxValue: maxValue);
                     bool ripDone = false;
 
                     var pollTask = Task.Run(async () =>
                     {
                         double lastSizeLocal = 0;
+                        string? currentMkv = null;
                         while (!ripDone)
                         {
                             try
                             {
-                                var mkv = Directory.EnumerateFiles(options.Temp!, "*.mkv").OrderByDescending(File.GetCreationTime).FirstOrDefault();
-                                if (mkv != null && expectedBytes > 0)
+                                // Identify the mkv file being written for this title: the first new mkv not in existingFiles
+                                if (currentMkv == null)
                                 {
-                                    var size = new FileInfo(mkv).Length;
+                                    currentMkv = Directory
+                                        .EnumerateFiles(options.Temp!, "*.mkv")
+                                        .FirstOrDefault(f => !existingFiles.Contains(f));
+                                }
+
+                                if (currentMkv != null && expectedBytes > 0)
+                                {
+                                    var size = new FileInfo(currentMkv).Length;
                                     lastSizeLocal = Math.Max(lastSizeLocal, size);
                                     task.Value = Math.Min(expectedBytes, lastSizeLocal);
                                 }
@@ -240,18 +250,24 @@ public class DiscRipper : IDiscRipper
             }
             else
             {
-                var safeTitle = !string.IsNullOrWhiteSpace(titleName) ? FileNaming.SanitizeFileName(titleName!) : $"movie_{titleIds.IndexOf(titleId) + 1}";
-                versionSuffix = $" - title{titleId:D2}";
+                var ordinal = titleIds.IndexOf(titleId) + 1;
+                var safeTitle = !string.IsNullOrWhiteSpace(titleName) ? FileNaming.SanitizeFileName(titleName!) : $"movie_{ordinal}";
+                versionSuffix = $" - title{ordinal:D2}";
                 var safeVersionSuffix = FileNaming.SanitizeFileName(versionSuffix);
                 outputName = Path.Combine(options.Output, $"{safeTitle}{safeVersionSuffix}.mkv");
             }
             if (File.Exists(outputName)) File.Delete(outputName);
 
-            if (await _encoder.EncodeAsync(src, outputName, includeEnglishSubtitles: true))
+            if (await _encoder.EncodeAsync(src, outputName, includeEnglishSubtitles: true, ordinal: titleIds.IndexOf(titleId) + 1, total: titleIds.Count))
             {
                 var episodeIdx = options.Tv ? titleIds.IndexOf(titleId) : (int?)null;
                 var episodeNum = episodeIdx.HasValue ? (options.EpisodeStart - 1) + episodeIdx.Value + 1 : (int?)null;
-                var final = FileNaming.RenameFile(outputName, metadata!, episodeNum, options.Season, versionSuffix);
+                string? episodeTitle = null;
+                if (options.Tv && episodeNum.HasValue)
+                {
+                    episodeTitle = await _episodeTitles.GetEpisodeTitleAsync(metadata!.Title, options.Season, episodeNum.Value, metadata.Year);
+                }
+                var final = FileNaming.RenameFile(outputName, metadata!, episodeNum, options.Season, versionSuffix, episodeTitle);
                 finalFiles.Add(final);
             }
         }

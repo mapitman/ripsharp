@@ -11,6 +11,7 @@ Set the TMDB API key as an environment variable for better security:
 ```bash
 # Linux/macOS - Add to ~/.bashrc or ~/.zshrc
 export TMDB_API_KEY="your_tmdb_api_key_here"
+export TVDB_API_KEY="your_tvdb_api_key_here"   # optional, for TV episode titles (in progress)
 
 # Then use the script normally
 ./rip_disc.py --output ~/Movies --title "inception"
@@ -41,7 +42,8 @@ encoding:
 metadata:
   lookup_enabled: true
   # API key can be set here, but environment variable is preferred
-  tmdb_api_key: ""
+    tmdb_api_key: ""
+    tvdb_api_key: ""   # optional
 ```
 
 Then use it with your rips:
@@ -49,6 +51,7 @@ Then use it with your rips:
 ```bash
 # Set API key via environment variable (recommended)
 export TMDB_API_KEY="your_tmdb_api_key_here"
+export TVDB_API_KEY="your_tvdb_api_key_here"
 
 # Use configuration file with online metadata lookup
 ./rip_disc.py --config config.yaml --output ~/Movies --title "inception"
