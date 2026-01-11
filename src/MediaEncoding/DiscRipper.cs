@@ -108,7 +108,6 @@ public class DiscRipper : IDiscRipper
             await AnsiConsole.Progress()
                 .AutoRefresh(true)
                 .AutoClear(false)
-
                 .HideCompleted(false)
                 .Columns(new ProgressColumn[]
                 {
