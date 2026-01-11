@@ -7,9 +7,9 @@ namespace RipSharp.Metadata;
 public class MetadataService : IMetadataService
 {
     private readonly List<IMetadataProvider> _providers;
-    private readonly IProgressNotifier _notifier;
+    private readonly IConsoleWriter _notifier;
 
-    public MetadataService(IEnumerable<IMetadataProvider> providers, IProgressNotifier notifier)
+    public MetadataService(IEnumerable<IMetadataProvider> providers, IConsoleWriter notifier)
     {
         _notifier = notifier;
         _providers = providers.ToList();

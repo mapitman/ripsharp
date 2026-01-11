@@ -21,7 +21,7 @@ public class OmdbMetadataProviderTests
     {
         var json = @"{""Response"":""True"",""Title"":""Inception"",""Year"":""2010"",""Type"":""movie""}";
         var httpClient = CreateHttpClient(json);
-        var notifier = Substitute.For<IProgressNotifier>();
+        var notifier = Substitute.For<IConsoleWriter>();
         var provider = new OmdbMetadataProvider(httpClient, "test-key", notifier);
 
         var result = await provider.LookupAsync("inception", isTv: false, year: null);
@@ -37,7 +37,7 @@ public class OmdbMetadataProviderTests
     {
         var json = @"{""Response"":""True"",""Title"":""Breaking Bad"",""Year"":""2008-2013"",""Type"":""series""}";
         var httpClient = CreateHttpClient(json);
-        var notifier = Substitute.For<IProgressNotifier>();
+        var notifier = Substitute.For<IConsoleWriter>();
         var provider = new OmdbMetadataProvider(httpClient, "test-key", notifier);
 
         var result = await provider.LookupAsync("breaking bad", isTv: true, year: 2008);
@@ -53,7 +53,7 @@ public class OmdbMetadataProviderTests
     {
         var json = @"{""Response"":""False"",""Error"":""Movie not found!""}";
         var httpClient = CreateHttpClient(json);
-        var notifier = Substitute.For<IProgressNotifier>();
+        var notifier = Substitute.For<IConsoleWriter>();
         var provider = new OmdbMetadataProvider(httpClient, "test-key", notifier);
 
         var result = await provider.LookupAsync("nonexistent movie", isTv: false, year: null);
@@ -66,7 +66,7 @@ public class OmdbMetadataProviderTests
     {
         var json = @"{invalid json}";
         var httpClient = CreateHttpClient(json);
-        var notifier = Substitute.For<IProgressNotifier>();
+        var notifier = Substitute.For<IConsoleWriter>();
         var provider = new OmdbMetadataProvider(httpClient, "test-key", notifier);
 
         var result = await provider.LookupAsync("test", isTv: false, year: null);
@@ -79,7 +79,7 @@ public class OmdbMetadataProviderTests
     {
         var handler = new FakeHttpMessageHandler(HttpStatusCode.ServiceUnavailable);
         var httpClient = new HttpClient(handler);
-        var notifier = Substitute.For<IProgressNotifier>();
+        var notifier = Substitute.For<IConsoleWriter>();
         var provider = new OmdbMetadataProvider(httpClient, "test-key", notifier);
 
         var result = await provider.LookupAsync("test", isTv: false, year: null);
@@ -91,7 +91,7 @@ public class OmdbMetadataProviderTests
     public void Name_ReturnsOMDB()
     {
         var httpClient = new HttpClient();
-        var notifier = Substitute.For<IProgressNotifier>();
+        var notifier = Substitute.For<IConsoleWriter>();
         var provider = new OmdbMetadataProvider(httpClient, "test-key", notifier);
 
         // Act & Assert
@@ -104,7 +104,7 @@ public class OmdbMetadataProviderTests
         var json = @"{""Response"":""True"",""Title"":""Dune"",""Year"":""2021"",""Type"":""movie""}";
         var handler = new FakeHttpMessageHandler(json);
         var httpClient = new HttpClient(handler);
-        var notifier = Substitute.For<IProgressNotifier>();
+        var notifier = Substitute.For<IConsoleWriter>();
         var provider = new OmdbMetadataProvider(httpClient, "test-key", notifier);
 
         await provider.LookupAsync("dune", isTv: false, year: 2021);
@@ -119,7 +119,7 @@ public class OmdbMetadataProviderTests
     {
         var json = @"{""Response"":""True"",""Title"":""Test"",""Year"":""N/A"",""Type"":""movie""}";
         var httpClient = CreateHttpClient(json);
-        var notifier = Substitute.For<IProgressNotifier>();
+        var notifier = Substitute.For<IConsoleWriter>();
         var provider = new OmdbMetadataProvider(httpClient, "test-key", notifier);
 
         var result = await provider.LookupAsync("test", isTv: false, year: 2020);

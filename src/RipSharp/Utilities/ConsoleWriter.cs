@@ -2,7 +2,10 @@ using Spectre.Console;
 
 namespace RipSharp.Utilities;
 
-public class ConsoleProgressNotifier : IProgressNotifier
+/// <summary>
+/// Spectre.Console implementation for writing styled messages to the console.
+/// </summary>
+public class ConsoleWriter : IConsoleWriter
 {
     private static void WriteColored(string color, string message)
         => AnsiConsole.MarkupLine($"[{color}]{Markup.Escape(message)}[/]");

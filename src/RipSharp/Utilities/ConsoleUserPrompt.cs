@@ -7,9 +7,9 @@ namespace RipSharp.Utilities;
 /// </summary>
 public class ConsoleUserPrompt : IUserPrompt
 {
-    private readonly IProgressNotifier _notifier;
+    private readonly IConsoleWriter _notifier;
 
-    public ConsoleUserPrompt(IProgressNotifier notifier)
+    public ConsoleUserPrompt(IConsoleWriter notifier)
     {
         _notifier = notifier;
     }

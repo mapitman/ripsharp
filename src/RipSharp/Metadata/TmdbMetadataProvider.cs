@@ -9,11 +9,11 @@ public class TmdbMetadataProvider : IMetadataProvider
 {
     private readonly HttpClient _http;
     private readonly string _apiKey;
-    private readonly IProgressNotifier _notifier;
+    private readonly IConsoleWriter _notifier;
 
     public string Name => "TMDB";
 
-    public TmdbMetadataProvider(HttpClient http, string apiKey, IProgressNotifier notifier)
+    public TmdbMetadataProvider(HttpClient http, string apiKey, IConsoleWriter notifier)
     {
         _http = http;
         _apiKey = apiKey;

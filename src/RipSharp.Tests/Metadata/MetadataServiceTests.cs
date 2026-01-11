@@ -34,7 +34,7 @@ public class MetadataServiceTests : IDisposable
     {
         Environment.SetEnvironmentVariable("OMDB_API_KEY", null);
         Environment.SetEnvironmentVariable("TMDB_API_KEY", null);
-        var notifier = Substitute.For<IProgressNotifier>();
+        var notifier = Substitute.For<IConsoleWriter>();
         var providers = new List<IMetadataProvider>();
         var svc = new MetadataService(providers, notifier);
 
@@ -49,7 +49,7 @@ public class MetadataServiceTests : IDisposable
     [Fact]
     public async Task LookupAsync_ReturnsFromFirstProvider_WhenMatch()
     {
-        var notifier = Substitute.For<IProgressNotifier>();
+        var notifier = Substitute.For<IConsoleWriter>();
         var provider1 = Substitute.For<IMetadataProvider>();
         provider1.Name.Returns("Provider1");
         provider1.LookupAsync("test", false, null).Returns(new ContentMetadata { Title = "Test Movie", Year = 2020, Type = "movie" });
@@ -72,7 +72,7 @@ public class MetadataServiceTests : IDisposable
     [Fact]
     public async Task LookupAsync_TriesSecondProvider_WhenFirstReturnsNull()
     {
-        var notifier = Substitute.For<IProgressNotifier>();
+        var notifier = Substitute.For<IConsoleWriter>();
         var provider1 = Substitute.For<IMetadataProvider>();
         provider1.Name.Returns("Provider1");
         provider1.LookupAsync("test", false, null).Returns((ContentMetadata?)null);
@@ -96,7 +96,7 @@ public class MetadataServiceTests : IDisposable
     [Fact]
     public async Task LookupAsync_UsesTitleVariations_WhenOriginalFails()
     {
-        var notifier = Substitute.For<IProgressNotifier>();
+        var notifier = Substitute.For<IConsoleWriter>();
         var provider = Substitute.For<IMetadataProvider>();
         provider.Name.Returns("TestProvider");
         provider.LookupAsync("MOVIE_TITLE_2023", Arg.Any<bool>(), Arg.Any<int?>()).Returns((ContentMetadata?)null);
@@ -117,7 +117,7 @@ public class MetadataServiceTests : IDisposable
     [Fact]
     public async Task LookupAsync_ShowsDifferentMessage_ForSimplifiedTitle()
     {
-        var notifier = Substitute.For<IProgressNotifier>();
+        var notifier = Substitute.For<IConsoleWriter>();
         var provider = Substitute.For<IMetadataProvider>();
         provider.Name.Returns("TestProvider");
         provider.LookupAsync("SIMPSONS_WS", Arg.Any<bool>(), Arg.Any<int?>()).Returns((ContentMetadata?)null);
@@ -137,7 +137,7 @@ public class MetadataServiceTests : IDisposable
     [Fact]
     public async Task LookupAsync_ShowsNormalMessage_ForOriginalTitle()
     {
-        var notifier = Substitute.For<IProgressNotifier>();
+        var notifier = Substitute.For<IConsoleWriter>();
         var provider = Substitute.For<IMetadataProvider>();
         provider.Name.Returns("TestProvider");
         provider.LookupAsync("Test Movie", Arg.Any<bool>(), Arg.Any<int?>()).Returns(new ContentMetadata { Title = "Test Movie", Year = 2020, Type = "movie" });

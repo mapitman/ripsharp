@@ -1,6 +1,9 @@
 namespace RipSharp.Abstractions;
 
-public interface IProgressNotifier
+/// <summary>
+/// Abstraction for writing styled output messages to the console.
+/// </summary>
+public interface IConsoleWriter
 {
     void Info(string message);
     void Success(string message);

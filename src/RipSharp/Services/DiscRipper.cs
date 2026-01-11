@@ -5,7 +5,6 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
-using Spectre.Console;
 
 namespace RipSharp.Services;
 
@@ -14,12 +13,13 @@ public class DiscRipper : IDiscRipper
     private readonly IDiscScanner _scanner;
     private readonly IEncoderService _encoder;
     private readonly IMetadataService _metadata;
-    private readonly IProgressNotifier _notifier;
+    private readonly IConsoleWriter _notifier;
     private readonly IMakeMkvService _makeMkv;
     private readonly IUserPrompt _userPrompt;
     private readonly ITvEpisodeTitleProvider _episodeTitles;
+    private readonly IProgressDisplay _progressDisplay;
 
-    public DiscRipper(IDiscScanner scanner, IEncoderService encoder, IMetadataService metadata, IMakeMkvService makeMkv, IProgressNotifier notifier, IUserPrompt userPrompt, ITvEpisodeTitleProvider episodeTitles)
+    public DiscRipper(IDiscScanner scanner, IEncoderService encoder, IMetadataService metadata, IMakeMkvService makeMkv, IConsoleWriter notifier, IUserPrompt userPrompt, ITvEpisodeTitleProvider episodeTitles, IProgressDisplay progressDisplay)
     {
         _scanner = scanner;
         _encoder = encoder;
@@ -28,6 +28,7 @@ public class DiscRipper : IDiscRipper
         _notifier = notifier;
         _userPrompt = userPrompt;
         _episodeTitles = episodeTitles;
+        _progressDisplay = progressDisplay;
     }
 
     public async Task<List<string>> ProcessDiscAsync(RipOptions options)
@@ -140,82 +141,69 @@ public class DiscRipper : IDiscRipper
             var progressLogPath = Path.Combine(options.Temp!, $"progress_title_{titleId:D2}.log");
             if (File.Exists(progressLogPath)) File.Delete(progressLogPath);
 
-            await AnsiConsole.Progress()
-                .AutoRefresh(true)
-                .AutoClear(false)
-                .HideCompleted(false)
-                .Columns(new ProgressColumn[]
-                {
-                    new TaskDescriptionColumn(),
-                    new ElapsedTimeColumn { Style = Color.Green },
-                    new ProgressBarColumn(),
-                    new PercentageColumn{ Style = Color.Yellow },
-                    new RemainingTimeColumn { Style = Color.Blue },
-                    new SpinnerColumn(),
-                })
-                .StartAsync(async ctx =>
-                {
-                    var expectedBytes = titleInfo?.ReportedSizeBytes ?? 0;
-                    var maxValue = expectedBytes > 0 ? expectedBytes : 100;
-                    var task = ctx.AddTask($"[{ConsoleColors.Success}]Title {idx + 1} ({idx + 1}/{totalTitles})[/]", maxValue: maxValue);
-                    bool ripDone = false;
+            await _progressDisplay.ExecuteAsync(async ctx =>
+            {
+                var expectedBytes = titleInfo?.ReportedSizeBytes ?? 0;
+                var maxValue = expectedBytes > 0 ? expectedBytes : 100;
+                var task = ctx.AddTask($"[{ConsoleColors.Success}]Title {idx + 1} ({idx + 1}/{totalTitles})[/]", maxValue);
+                bool ripDone = false;
 
-                    var pollTask = Task.Run(async () =>
+                var pollTask = Task.Run(async () =>
+                {
+                    double lastSizeLocal = 0;
+                    string? currentMkv = null;
+                    while (!ripDone)
                     {
-                        double lastSizeLocal = 0;
-                        string? currentMkv = null;
-                        while (!ripDone)
+                        try
                         {
-                            try
+                            // Identify the mkv file being written for this title: the first new mkv not in existingFiles
+                            if (currentMkv == null)
                             {
-                                // Identify the mkv file being written for this title: the first new mkv not in existingFiles
-                                if (currentMkv == null)
-                                {
-                                    currentMkv = Directory
-                                        .EnumerateFiles(options.Temp!, "*.mkv")
-                                        .FirstOrDefault(f => !existingFiles.Contains(f));
-                                }
-
-                                if (currentMkv != null && expectedBytes > 0)
-                                {
-                                    var size = new FileInfo(currentMkv).Length;
-                                    lastSizeLocal = Math.Max(lastSizeLocal, size);
-                                    task.Value = Math.Min(expectedBytes, lastSizeLocal);
-                                }
+                                currentMkv = Directory
+                                    .EnumerateFiles(options.Temp!, "*.mkv")
+                                    .FirstOrDefault(f => !existingFiles.Contains(f));
                             }
-                            catch { }
-                            await Task.Delay(1000);
+
+                            if (currentMkv != null && expectedBytes > 0)
+                            {
+                                var size = new FileInfo(currentMkv).Length;
+                                lastSizeLocal = Math.Max(lastSizeLocal, size);
+                                task.Value = (long)Math.Min(expectedBytes, lastSizeLocal);
+                            }
                         }
-                    });
-
-                    var rawLogPath = Path.Combine(options.Temp!, $"makemkv_title_{titleId:D2}.log");
-                    var handler = new MakeMkvOutputHandler(expectedBytes, idx, totalTitles, task, progressLogPath, rawLogPath);
-                    var exit = await _makeMkv.RipTitleAsync(options.Disc, titleId, options.Temp!,
-                        onOutput: handler.HandleLine,
-                        onError: errLine =>
-                        {
-                            if (!(errLine.StartsWith("PRGV:") || errLine.StartsWith("PRGC:")))
-                            {
-                                _notifier.Error(errLine);
-                            }
-                            handler.HandleLine(errLine);
-                        });
-                    ripDone = true;
-                    try { await pollTask; } catch { }
-
-                    if (exit != 0)
-                    {
-                        task.Description = $"[{ConsoleColors.Error}]Failed: Title {titleId}[/]";
-                        task.StopTask();
-                        _notifier.Error($"Failed to rip title {titleId}");
-                        return;
+                        catch { }
+                        await Task.Delay(1000);
                     }
-                    if (handler.LastBytesProcessed < maxValue)
-                    {
-                        task.Value = maxValue;
-                    }
-                    task.StopTask();
                 });
+
+                var rawLogPath = Path.Combine(options.Temp!, $"makemkv_title_{titleId:D2}.log");
+                var handler = new MakeMkvOutputHandler(expectedBytes, idx, totalTitles, task, progressLogPath, rawLogPath, _notifier);
+                var exit = await _makeMkv.RipTitleAsync(options.Disc, titleId, options.Temp!,
+                    onOutput: handler.HandleLine,
+                    onError: errLine =>
+                    {
+                        if (!(errLine.StartsWith("PRGV:") || errLine.StartsWith("PRGC:")))
+                        {
+                            _notifier.Error(errLine);
+                        }
+                        handler.HandleLine(errLine);
+                    });
+                ripDone = true;
+                try { await pollTask; } catch { }
+
+                if (exit != 0)
+                {
+                    task.Description = $"[{ConsoleColors.Error}]Failed: Title {titleId}[/]";
+                    task.StopTask();
+                    _notifier.Error($"Failed to rip title {titleId}");
+                    return;
+                }
+                if (handler.LastBytesProcessed < maxValue)
+                {
+                    task.Value = maxValue;
+                }
+                task.StopTask();
+            });
 
             var newFiles = Directory.EnumerateFiles(options.Temp!, "*.mkv").Where(f => !existingFiles.Contains(f)).ToList();
             if (newFiles.Count > 0)

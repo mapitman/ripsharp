@@ -8,10 +8,10 @@ namespace RipSharp.Services;
 public class DiscScanner : IDiscScanner
 {
     private readonly IProcessRunner _runner;
-    private readonly IProgressNotifier _notifier;
+    private readonly IConsoleWriter _notifier;
     private readonly IDiscTypeDetector _typeDetector;
 
-    public DiscScanner(IProcessRunner runner, IProgressNotifier notifier, IDiscTypeDetector typeDetector)
+    public DiscScanner(IProcessRunner runner, IConsoleWriter notifier, IDiscTypeDetector typeDetector)
     {
         _runner = runner;
         _notifier = notifier;

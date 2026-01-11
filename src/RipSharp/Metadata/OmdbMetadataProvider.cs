@@ -9,11 +9,11 @@ public class OmdbMetadataProvider : IMetadataProvider
 {
     private readonly HttpClient _http;
     private readonly string _apiKey;
-    private readonly IProgressNotifier _notifier;
+    private readonly IConsoleWriter _notifier;
 
     public string Name => "OMDB";
 
-    public OmdbMetadataProvider(HttpClient http, string apiKey, IProgressNotifier notifier)
+    public OmdbMetadataProvider(HttpClient http, string apiKey, IConsoleWriter notifier)
     {
         _http = http;
         _apiKey = apiKey;

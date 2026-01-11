@@ -21,7 +21,7 @@ public class TmdbMetadataProviderTests
     {
         var json = @"{""results"":[{""title"":""The Matrix"",""release_date"":""1999-03-31""}]}";
         var httpClient = CreateHttpClient(json);
-        var notifier = Substitute.For<IProgressNotifier>();
+        var notifier = Substitute.For<IConsoleWriter>();
         var provider = new TmdbMetadataProvider(httpClient, "test-key", notifier);
 
         var result = await provider.LookupAsync("the matrix", isTv: false, year: null);
@@ -37,7 +37,7 @@ public class TmdbMetadataProviderTests
     {
         var json = @"{""results"":[{""name"":""Game of Thrones"",""first_air_date"":""2011-04-17""}]}";
         var httpClient = CreateHttpClient(json);
-        var notifier = Substitute.For<IProgressNotifier>();
+        var notifier = Substitute.For<IConsoleWriter>();
         var provider = new TmdbMetadataProvider(httpClient, "test-key", notifier);
 
         var result = await provider.LookupAsync("game of thrones", isTv: true, year: null);
@@ -53,7 +53,7 @@ public class TmdbMetadataProviderTests
     {
         var json = @"{""results"":[]}";
         var httpClient = CreateHttpClient(json);
-        var notifier = Substitute.For<IProgressNotifier>();
+        var notifier = Substitute.For<IConsoleWriter>();
         var provider = new TmdbMetadataProvider(httpClient, "test-key", notifier);
 
         var result = await provider.LookupAsync("nonexistent movie", isTv: false, year: null);
@@ -66,7 +66,7 @@ public class TmdbMetadataProviderTests
     {
         var json = @"{invalid json}";
         var httpClient = CreateHttpClient(json);
-        var notifier = Substitute.For<IProgressNotifier>();
+        var notifier = Substitute.For<IConsoleWriter>();
         var provider = new TmdbMetadataProvider(httpClient, "test-key", notifier);
 
         var result = await provider.LookupAsync("test", isTv: false, year: null);
@@ -79,7 +79,7 @@ public class TmdbMetadataProviderTests
     {
         var handler = new FakeHttpMessageHandler(HttpStatusCode.ServiceUnavailable);
         var httpClient = new HttpClient(handler);
-        var notifier = Substitute.For<IProgressNotifier>();
+        var notifier = Substitute.For<IConsoleWriter>();
         var provider = new TmdbMetadataProvider(httpClient, "test-key", notifier);
 
         var result = await provider.LookupAsync("test", isTv: false, year: null);
@@ -91,7 +91,7 @@ public class TmdbMetadataProviderTests
     public void Name_ReturnsTMDB()
     {
         var httpClient = new HttpClient();
-        var notifier = Substitute.For<IProgressNotifier>();
+        var notifier = Substitute.For<IConsoleWriter>();
         var provider = new TmdbMetadataProvider(httpClient, "test-key", notifier);
 
         // Act & Assert
@@ -103,7 +103,7 @@ public class TmdbMetadataProviderTests
     {
         var json = @"{""results"":[{""title"":""Upcoming Movie""}]}";
         var httpClient = CreateHttpClient(json);
-        var notifier = Substitute.For<IProgressNotifier>();
+        var notifier = Substitute.For<IConsoleWriter>();
         var provider = new TmdbMetadataProvider(httpClient, "test-key", notifier);
 
         var result = await provider.LookupAsync("upcoming", isTv: false, year: 2025);
@@ -118,7 +118,7 @@ public class TmdbMetadataProviderTests
     {
         var json = @"{""results"":[{""name"":""New Series""}]}";
         var httpClient = CreateHttpClient(json);
-        var notifier = Substitute.For<IProgressNotifier>();
+        var notifier = Substitute.For<IConsoleWriter>();
         var provider = new TmdbMetadataProvider(httpClient, "test-key", notifier);
 
         var result = await provider.LookupAsync("new series", isTv: true, year: 2026);
@@ -133,7 +133,7 @@ public class TmdbMetadataProviderTests
     {
         var json = @"{""results"":[{""title"":""Test Movie"",""release_date"":""202""}]}";
         var httpClient = CreateHttpClient(json);
-        var notifier = Substitute.For<IProgressNotifier>();
+        var notifier = Substitute.For<IConsoleWriter>();
         var provider = new TmdbMetadataProvider(httpClient, "test-key", notifier);
 
         var result = await provider.LookupAsync("test", isTv: false, year: 2020);
@@ -147,7 +147,7 @@ public class TmdbMetadataProviderTests
     {
         var json = @"{""results"":[{""title"":""First Movie"",""release_date"":""2020-01-01""},{""title"":""Second Movie"",""release_date"":""2021-01-01""}]}";
         var httpClient = CreateHttpClient(json);
-        var notifier = Substitute.For<IProgressNotifier>();
+        var notifier = Substitute.For<IConsoleWriter>();
         var provider = new TmdbMetadataProvider(httpClient, "test-key", notifier);
 
         var result = await provider.LookupAsync("movie", isTv: false, year: null);

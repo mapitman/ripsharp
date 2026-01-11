@@ -11,7 +11,6 @@ using Microsoft.Extensions.Hosting;
 
 using NetEscapades.Configuration.Yaml;
 
-using Spectre.Console;
 
 namespace RipSharp.Core;
 
@@ -29,7 +28,8 @@ public class Program
             .ConfigureServices((ctx, services) =>
             {
                 services.Configure<AppConfig>(ctx.Configuration);
-                services.AddSingleton<IProgressNotifier, ConsoleProgressNotifier>();
+                services.AddSingleton<IConsoleWriter, ConsoleWriter>();
+                services.AddSingleton<IProgressDisplay, SpectreProgressDisplay>();
                 services.AddSingleton<IUserPrompt, ConsoleUserPrompt>();
                 services.AddSingleton<IProcessRunner, ProcessRunner>();
                 services.AddSingleton<IMakeMkvService, MakeMkvService>();
@@ -43,7 +43,7 @@ public class Program
 
                 services.AddSingleton<IEnumerable<IMetadataProvider>>(sp =>
                 {
-                    var notifier = sp.GetRequiredService<IProgressNotifier>();
+                    var notifier = sp.GetRequiredService<IConsoleWriter>();
                     var httpClient = new HttpClient();
                     var providers = new List<IMetadataProvider>();
 
@@ -59,7 +59,7 @@ public class Program
 
                 services.AddSingleton<ITvEpisodeTitleProvider>(sp =>
                 {
-                    var notifier = sp.GetRequiredService<IProgressNotifier>();
+                    var notifier = sp.GetRequiredService<IConsoleWriter>();
                     if (!string.IsNullOrWhiteSpace(tvdbKey))
                         return new TvdbMetadataProvider(new HttpClient(), tvdbKey, notifier);
                     return new NullEpisodeTitleProvider();
@@ -75,25 +75,26 @@ public class Program
 
         if (options.ShowHelp)
         {
-            RipOptions.DisplayHelp();
+            RipOptions.DisplayHelp(new ConsoleWriter());
             return 0;
         }
 
         var ripper = host.Services.GetRequiredService<IDiscRipper>();
+        var writer = host.Services.GetRequiredService<IConsoleWriter>();
         var files = await ripper.ProcessDiscAsync(options);
 
         if (files.Count > 0)
         {
-            AnsiConsole.MarkupLine($"[{ConsoleColors.Success}]Success! Files created:[/]");
+            writer.Success("Success! Files created:");
             foreach (var f in files)
             {
-                AnsiConsole.WriteLine(Markup.Escape(f));
+                writer.Plain(f);
             }
             return 0;
         }
         else
         {
-            AnsiConsole.MarkupLine($"[{ConsoleColors.Error}]Failed to process disc[/]");
+            writer.Error("Failed to process disc");
             return 1;
         }
     }

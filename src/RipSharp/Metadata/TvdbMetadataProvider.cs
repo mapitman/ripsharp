@@ -16,7 +16,7 @@ public class TvdbMetadataProvider : IMetadataProvider, ITvEpisodeTitleProvider
 {
     private readonly HttpClient _http;
     private readonly string _apiKey;
-    private readonly IProgressNotifier _notifier;
+    private readonly IConsoleWriter _notifier;
 
     private string? _token;
     private DateTime _tokenExpiryUtc = DateTime.MinValue;
@@ -24,7 +24,7 @@ public class TvdbMetadataProvider : IMetadataProvider, ITvEpisodeTitleProvider
 
     public string Name => "TVDB";
 
-    public TvdbMetadataProvider(HttpClient http, string apiKey, IProgressNotifier notifier)
+    public TvdbMetadataProvider(HttpClient http, string apiKey, IConsoleWriter notifier)
     {
         _http = http;
         _apiKey = apiKey;

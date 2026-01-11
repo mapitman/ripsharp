@@ -3,19 +3,20 @@ using System.Collections.Generic;
 using System.Text.Json;
 using System.Threading.Tasks;
 
-using Spectre.Console;
 
 namespace RipSharp.Services;
 
 public class EncoderService : IEncoderService
 {
     private readonly IProcessRunner _runner;
-    private readonly IProgressNotifier _notifier;
+    private readonly IConsoleWriter _notifier;
+    private readonly IProgressDisplay _progressDisplay;
 
-    public EncoderService(IProcessRunner runner, IProgressNotifier notifier)
+    public EncoderService(IProcessRunner runner, IConsoleWriter notifier, IProgressDisplay progressDisplay)
     {
         _runner = runner;
         _notifier = notifier;
+        _progressDisplay = progressDisplay;
     }
 
     public async Task<MediaFileAnalysis?> AnalyzeAsync(string filePath)
@@ -82,39 +83,25 @@ public class EncoderService : IEncoderService
     {
         var exit = 0;
 
-        await AnsiConsole.Progress()
-            .Columns(new ProgressColumn[]
-            {
-                new TaskDescriptionColumn(),
-                new ElapsedTimeColumn { Style = CustomColors.Highlight },
-                new ProgressBarColumn
-                {
-                    CompletedStyle = CustomColors.Success,
-                    RemainingStyle = CustomColors.Muted
-                },
-                new PercentageColumn { Style = CustomColors.Info },
-                new RemainingTimeColumn { Style = CustomColors.Accent },
-                new SpinnerColumn(),
-            })
-            .StartAsync(async ctx =>
-            {
-                var task = ctx.AddTask($"[{ConsoleColors.Success}]Encoding ({ordinal}/{total})[/]", maxValue: durationTicks);
+        await _progressDisplay.ExecuteAsync(async ctx =>
+        {
+            var task = ctx.AddTask($"[{ConsoleColors.Success}]Encoding ({ordinal}/{total})[/]", durationTicks);
 
-                exit = await _runner.RunAsync("ffmpeg", ffmpegArgs,
-                    onOutput: _ => { },  // ffmpeg stdout - not used with -progress pipe:2
-                    onError: line => HandleEncodingProgress(line, task, durationTicks, ordinal, total));
+            exit = await _runner.RunAsync("ffmpeg", ffmpegArgs,
+                onOutput: _ => { },  // ffmpeg stdout - not used with -progress pipe:2
+                onError: line => HandleEncodingProgress(line, task, durationTicks, ordinal, total));
 
-                if (exit == 0 && task.Value < durationTicks)
-                {
-                    task.Value = durationTicks;
-                }
-                task.StopTask();
-            });
+            if (exit == 0 && task.Value < durationTicks)
+            {
+                task.Value = durationTicks;
+            }
+            task.StopTask();
+        });
 
         return exit;
     }
 
-    private static void HandleEncodingProgress(string line, Spectre.Console.ProgressTask task, long durationTicks, int ordinal, int total)
+    private void HandleEncodingProgress(string line, IProgressTask task, long durationTicks, int ordinal, int total)
     {
         // Progress lines come in key=value format on stderr
         // Use out_time_us (microseconds) for accurate progress tracking
@@ -145,8 +132,7 @@ public class EncoderService : IEncoderService
                 s.StartsWith("dup_frames=") || s.StartsWith("drop_frames=") || s.StartsWith("progress=");
 
             if (string.IsNullOrWhiteSpace(line) || IsProgressLine(line)) return;
-            // Note: Still using AnsiConsole for error output during active progress display
-            AnsiConsole.MarkupLine($"[{ConsoleColors.Error}]❌ ffmpeg: {Markup.Escape(line)}[/]");
+            _notifier.Error($"❌ ffmpeg: {line}");
         }
     }
 

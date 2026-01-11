@@ -6,7 +6,7 @@ namespace RipSharp.MakeMkv;
 
 public class ScanOutputHandler
 {
-    private readonly IProgressNotifier _notifier;
+    private readonly IConsoleWriter _notifier;
     private readonly List<TitleInfo> _titles;
     private string? _discName;
     private string? _discType;
@@ -16,7 +16,7 @@ public class ScanOutputHandler
     private int _titleAddedCount;
     private readonly HashSet<string> _printedTitles = new();
 
-    public ScanOutputHandler(IProgressNotifier notifier, List<TitleInfo> titles)
+    public ScanOutputHandler(IConsoleWriter notifier, List<TitleInfo> titles)
     {
         _notifier = notifier;
         _titles = titles;
