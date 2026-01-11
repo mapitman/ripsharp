@@ -18,10 +18,10 @@ jobs:
           dotnet-version: 10.0.x
 
       - name: Restore
-        run: dotnet restore media-encoding.sln
+        run: dotnet restore RipSharp.sln
 
       - name: Build
-        run: dotnet build --no-restore media-encoding.sln
+        run: dotnet build --no-restore RipSharp.sln
 
       - name: Test
-        run: dotnet test --no-build --verbosity normal media-encoding.sln
+        run: dotnet test --no-build --verbosity normal RipSharp.sln
