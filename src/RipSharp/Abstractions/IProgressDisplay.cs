@@ -31,12 +31,12 @@ public interface IProgressTask
     /// Gets or sets the current progress value.
     /// </summary>
     long Value { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the task description (can include markup for styling).
     /// </summary>
     string Description { get; set; }
-    
+
     /// <summary>
     /// Stops the task, marking it as complete.
     /// </summary>

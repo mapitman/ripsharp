@@ -148,62 +148,62 @@ public class DiscRipper : IDiscRipper
                 var task = ctx.AddTask($"[{ConsoleColors.Success}]Title {idx + 1} ({idx + 1}/{totalTitles})[/]", maxValue);
                 bool ripDone = false;
 
-                    var pollTask = Task.Run(async () =>
+                var pollTask = Task.Run(async () =>
+                {
+                    double lastSizeLocal = 0;
+                    string? currentMkv = null;
+                    while (!ripDone)
                     {
-                        double lastSizeLocal = 0;
-                        string? currentMkv = null;
-                        while (!ripDone)
+                        try
                         {
-                            try
+                            // Identify the mkv file being written for this title: the first new mkv not in existingFiles
+                            if (currentMkv == null)
                             {
-                                // Identify the mkv file being written for this title: the first new mkv not in existingFiles
-                                if (currentMkv == null)
-                                {
-                                    currentMkv = Directory
-                                        .EnumerateFiles(options.Temp!, "*.mkv")
-                                        .FirstOrDefault(f => !existingFiles.Contains(f));
-                                }
-
-                                if (currentMkv != null && expectedBytes > 0)
-                                {
-                                    var size = new FileInfo(currentMkv).Length;
-                                    lastSizeLocal = Math.Max(lastSizeLocal, size);
-                                    task.Value = (long)Math.Min(expectedBytes, lastSizeLocal);
-                                }
+                                currentMkv = Directory
+                                    .EnumerateFiles(options.Temp!, "*.mkv")
+                                    .FirstOrDefault(f => !existingFiles.Contains(f));
                             }
-                            catch { }
-                            await Task.Delay(1000);
+
+                            if (currentMkv != null && expectedBytes > 0)
+                            {
+                                var size = new FileInfo(currentMkv).Length;
+                                lastSizeLocal = Math.Max(lastSizeLocal, size);
+                                task.Value = (long)Math.Min(expectedBytes, lastSizeLocal);
+                            }
                         }
-                    });
-
-                    var rawLogPath = Path.Combine(options.Temp!, $"makemkv_title_{titleId:D2}.log");
-                    var handler = new MakeMkvOutputHandler(expectedBytes, idx, totalTitles, task, progressLogPath, rawLogPath, _notifier);
-                    var exit = await _makeMkv.RipTitleAsync(options.Disc, titleId, options.Temp!,
-                        onOutput: handler.HandleLine,
-                        onError: errLine =>
-                        {
-                            if (!(errLine.StartsWith("PRGV:") || errLine.StartsWith("PRGC:")))
-                            {
-                                _notifier.Error(errLine);
-                            }
-                            handler.HandleLine(errLine);
-                        });
-                    ripDone = true;
-                    try { await pollTask; } catch { }
-
-                    if (exit != 0)
-                    {
-                        task.Description = $"[{ConsoleColors.Error}]Failed: Title {titleId}[/]";
-                        task.StopTask();
-                        _notifier.Error($"Failed to rip title {titleId}");
-                        return;
+                        catch { }
+                        await Task.Delay(1000);
                     }
-                    if (handler.LastBytesProcessed < maxValue)
-                    {
-                        task.Value = maxValue;
-                    }
-                    task.StopTask();
                 });
+
+                var rawLogPath = Path.Combine(options.Temp!, $"makemkv_title_{titleId:D2}.log");
+                var handler = new MakeMkvOutputHandler(expectedBytes, idx, totalTitles, task, progressLogPath, rawLogPath, _notifier);
+                var exit = await _makeMkv.RipTitleAsync(options.Disc, titleId, options.Temp!,
+                    onOutput: handler.HandleLine,
+                    onError: errLine =>
+                    {
+                        if (!(errLine.StartsWith("PRGV:") || errLine.StartsWith("PRGC:")))
+                        {
+                            _notifier.Error(errLine);
+                        }
+                        handler.HandleLine(errLine);
+                    });
+                ripDone = true;
+                try { await pollTask; } catch { }
+
+                if (exit != 0)
+                {
+                    task.Description = $"[{ConsoleColors.Error}]Failed: Title {titleId}[/]";
+                    task.StopTask();
+                    _notifier.Error($"Failed to rip title {titleId}");
+                    return;
+                }
+                if (handler.LastBytesProcessed < maxValue)
+                {
+                    task.Value = maxValue;
+                }
+                task.StopTask();
+            });
 
             var newFiles = Directory.EnumerateFiles(options.Temp!, "*.mkv").Where(f => !existingFiles.Contains(f)).ToList();
             if (newFiles.Count > 0)
