@@ -6,8 +6,23 @@ using Xunit;
 
 namespace MediaEncoding.Tests;
 
-public class MetadataServiceTests
+public class MetadataServiceTests : IDisposable
 {
+    private readonly string? _originalOmdbKey;
+    private readonly string? _originalTmdbKey;
+
+    public MetadataServiceTests()
+    {
+        _originalOmdbKey = Environment.GetEnvironmentVariable("OMDB_API_KEY");
+        _originalTmdbKey = Environment.GetEnvironmentVariable("TMDB_API_KEY");
+    }
+
+    public void Dispose()
+    {
+        Environment.SetEnvironmentVariable("OMDB_API_KEY", _originalOmdbKey);
+        Environment.SetEnvironmentVariable("TMDB_API_KEY", _originalTmdbKey);
+    }
+
     [Fact]
     public async Task LookupAsync_Fallbacks_WhenNoApiKeys()
     {
