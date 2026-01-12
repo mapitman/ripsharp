@@ -10,6 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
 using NetEscapades.Configuration.Yaml;
+using Spectre.Console;
 
 
 namespace RipSharp.Core;
@@ -17,6 +18,28 @@ namespace RipSharp.Core;
 public class Program
 {
     public static async Task<int> Main(string[] args)
+    {
+        // Manage cursor visibility for entire application lifetime
+        using var cursorManager = new CursorManager();
+
+        // Register handlers for graceful shutdown
+        Console.CancelKeyPress += (sender, e) =>
+        {
+            e.Cancel = true;  // Prevent immediate termination, we'll handle exit explicitly
+            cursorManager.RestoreCursor();
+            AnsiConsole.MarkupLine($"\n[{ConsoleColors.Warning}]⚠️  Operation interrupted by user[/]");
+            Environment.Exit(130);  // Exit with signal code for SIGINT
+        };
+
+        AppDomain.CurrentDomain.ProcessExit += (sender, e) =>
+        {
+            cursorManager.RestoreCursor();
+        };
+
+        return await RunAsync(args, cursorManager);
+    }
+
+    private static async Task<int> RunAsync(string[] args, CursorManager cursorManager)
     {
         using var host = Host.CreateDefaultBuilder(args)
             .ConfigureAppConfiguration((ctx, cfg) =>
