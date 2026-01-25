@@ -74,9 +74,14 @@ public class RipOptions
         }
         if (string.IsNullOrEmpty(opts.Temp))
         {
-            opts.Temp = Path.Combine(opts.Output, ".makemkv");
+            opts.Temp = Path.Combine(opts.Output, GetTempDirectoryName());
         }
         return opts;
+    }
+
+    private static string GetTempDirectoryName()
+    {
+        return $".{Path.GetFileNameWithoutExtension(Path.GetRandomFileName())}";
     }
 
     public static void DisplayHelp(IConsoleWriter writer)
@@ -95,7 +100,7 @@ public class RipOptions
         writer.Plain("                            - movie: Treat as single movie");
         writer.Plain("                            - tv: Treat as TV series");
         writer.Plain("    --disc PATH             Optical drive path (default: disc:0)");
-        writer.Plain("    --temp PATH             Temporary ripping directory (default: {output}/.makemkv)");
+        writer.Plain("    --temp PATH             Temporary ripping directory (default: {output}/<RANDOM_STRING>)");
         writer.Plain("    --title TEXT            Custom title for file naming");
         writer.Plain("    --year YYYY             Release year (movies only)");
         writer.Plain("    --season N              Season number (TV only, default: 1)");
