@@ -57,6 +57,10 @@ public class DiscRipper : IDiscRipper
         {
             CleanupTempDirectory(options);
         }
+        else if (rippedFilesMap.Count > 0)
+        {
+            _notifier.Error($"No files were successfully encoded; temporary files have been left in: {options.Temp}");
+        }
 
         _notifier.Success($"Processing complete. Output files: {finalFiles.Count}");
         foreach (var f in finalFiles) _notifier.Plain(f);
