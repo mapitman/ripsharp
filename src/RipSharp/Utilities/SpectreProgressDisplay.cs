@@ -35,7 +35,19 @@ public class SpectreProgressDisplay : IProgressDisplay
                 await action(liveContext);
 
                 refreshCts.Cancel();
-                try { await refreshTask; } catch { }
+                try
+                {
+                    await refreshTask;
+                }
+                catch (TaskCanceledException)
+                {
+                    // Expected when the refresh loop is cancelled; safely ignore.
+                }
+                catch (Exception ex)
+                {
+                    // Log unexpected exceptions from the refresh loop.
+                    AnsiConsole.WriteException(ex);
+                }
 
                 // Final render after completion
                 live.UpdateTarget(Render(liveContext));
