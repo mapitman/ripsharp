@@ -540,7 +540,14 @@ public class DiscRipper : IDiscRipper
                 handler.HandleLine(errLine);
             });
         ripDone = true;
-        try { await pollTask; } catch { }
+        try
+        {
+            await pollTask;
+        }
+        catch (Exception ex)
+        {
+            _notifier.Error($"Error while monitoring rip progress: {ex}");
+        }
         if (exit == 0)
         {
             var newFiles = Directory.EnumerateFiles(options.Temp!, "*.mkv").Where(f => !existingFiles.Contains(f)).ToList();
