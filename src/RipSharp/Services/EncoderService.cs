@@ -9,14 +9,10 @@ namespace RipSharp.Services;
 public class EncoderService : IEncoderService
 {
     private readonly IProcessRunner _runner;
-    private readonly IConsoleWriter _notifier;
-    private readonly IProgressDisplay _progressDisplay;
 
     public EncoderService(IProcessRunner runner, IConsoleWriter notifier, IProgressDisplay progressDisplay)
     {
         _runner = runner;
-        _notifier = notifier;
-        _progressDisplay = progressDisplay;
     }
 
     public async Task<MediaFileAnalysis?> AnalyzeAsync(string filePath)
@@ -54,7 +50,7 @@ public class EncoderService : IEncoderService
         return new MediaFileAnalysis { Streams = streams, DurationSeconds = durationSeconds };
     }
 
-    public async Task<bool> EncodeAsync(string inputFile, string outputFile, bool includeEnglishSubtitles, int ordinal, int total)
+    public async Task<bool> EncodeAsync(string inputFile, string outputFile, bool includeEnglishSubtitles, int ordinal, int total, IProgressTask? progressTask = null)
     {
         var analysis = await AnalyzeAsync(inputFile);
         if (analysis == null) return false;
@@ -62,47 +58,20 @@ public class EncoderService : IEncoderService
         var selected = SelectStreams(analysis, includeEnglishSubtitles);
         var ffmpegArgs = BuildFfmpegArguments(inputFile, outputFile, selected);
 
-        DisplayEncodingInfo(inputFile, outputFile, ordinal, total);
+        var durationSeconds = analysis.DurationSeconds ?? 0;
+        var durationTicks = (long)(durationSeconds * TimeSpan.TicksPerSecond);
 
-        var durationTicks = (long)((analysis.DurationSeconds ?? 0) * 1000.0 * TimeSpan.TicksPerMillisecond);
-        var exit = await RunEncodingWithProgress(ffmpegArgs, durationTicks, ordinal, total);
+        var exit = await _runner.RunAsync("ffmpeg", ffmpegArgs,
+            onOutput: _ => { },  // ffmpeg stdout - not used with -progress pipe:2
+            onError: line => HandleEncodingProgress(line, progressTask, durationTicks)); // Parse progress from stderr
 
         return exit == 0;
     }
 
-    private void DisplayEncodingInfo(string inputFile, string outputFile, int ordinal, int total)
+    private void HandleEncodingProgress(string line, IProgressTask? task, long durationTicks)
     {
-        var inputFileName = System.IO.Path.GetFileName(inputFile);
-        var outputFileName = System.IO.Path.GetFileName(outputFile);
-        _notifier.Info($"🎬 Encoding ({ordinal}/{total}): {inputFileName}");
-        _notifier.Info($"   → Output: {outputFileName}");
-        _notifier.Muted("   Settings: x264 preset=slow CRF=22");
-    }
+        if (task == null) return;
 
-    private async Task<int> RunEncodingWithProgress(string ffmpegArgs, long durationTicks, int ordinal, int total)
-    {
-        var exit = 0;
-
-        await _progressDisplay.ExecuteAsync(async ctx =>
-        {
-            var task = ctx.AddTask($"[{ConsoleColors.Success}]Encoding ({ordinal}/{total})[/]", durationTicks);
-
-            exit = await _runner.RunAsync("ffmpeg", ffmpegArgs,
-                onOutput: _ => { },  // ffmpeg stdout - not used with -progress pipe:2
-                onError: line => HandleEncodingProgress(line, task, durationTicks, ordinal, total));
-
-            if (exit == 0 && task.Value < durationTicks)
-            {
-                task.Value = durationTicks;
-            }
-            task.StopTask();
-        });
-
-        return exit;
-    }
-
-    private void HandleEncodingProgress(string line, IProgressTask task, long durationTicks, int ordinal, int total)
-    {
         // Progress lines come in key=value format on stderr
         // Use out_time_us (microseconds) for accurate progress tracking
         if (line.StartsWith("out_time_us="))
@@ -112,27 +81,8 @@ public class EncoderService : IEncoderService
             {
                 var currentTimeMs = timeUs / 1000.0;  // Convert microseconds to milliseconds
                 var timeTicks = (long)(currentTimeMs * TimeSpan.TicksPerMillisecond);
-                task.Value = Math.Min(durationTicks, timeTicks);
+                task.Value = Math.Min(100, (long)((double)timeTicks / durationTicks * 100));
             }
-        }
-        else if (line.StartsWith("speed="))
-        {
-            var speed = line.Substring("speed=".Length).TrimEnd('x');
-            if (!string.IsNullOrEmpty(speed) && speed != "0.00" && speed != "N/A")
-            {
-                task.Description = $"[{ConsoleColors.Success}]Encoding ({ordinal}/{total}, {speed}x)[/]";
-            }
-        }
-        else
-        {
-            // Filter out other progress lines
-            static bool IsProgressLine(string s) =>
-                s.StartsWith("frame=") || s.StartsWith("fps=") || s.StartsWith("stream_") ||
-                s.StartsWith("bitrate=") || s.StartsWith("total_size=") || s.StartsWith("out_time") ||
-                s.StartsWith("dup_frames=") || s.StartsWith("drop_frames=") || s.StartsWith("progress=");
-
-            if (string.IsNullOrWhiteSpace(line) || IsProgressLine(line)) return;
-            _notifier.Error($"❌ ffmpeg: {line}");
         }
     }
 

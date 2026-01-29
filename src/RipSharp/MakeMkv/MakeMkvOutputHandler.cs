@@ -9,14 +9,15 @@ public class MakeMkvOutputHandler
     private readonly long _expectedBytes;
     private readonly int _index;
     private readonly int _totalTitles;
-    private readonly IProgressTask _task;
+    private readonly IProgressTask? _task;
     private readonly string _progressLogPath;
     private readonly string _rawLogPath;
     private readonly IConsoleWriter _writer;
 
     public double LastBytesProcessed { get; private set; }
+    public double LastProgressFraction { get; private set; }
 
-    public MakeMkvOutputHandler(long expectedBytes, int index, int totalTitles, IProgressTask task, string progressLogPath, string rawLogPath, IConsoleWriter writer)
+    public MakeMkvOutputHandler(long expectedBytes, int index, int totalTitles, IProgressTask? task, string progressLogPath, string rawLogPath, IConsoleWriter writer)
     {
         _expectedBytes = expectedBytes;
         _index = index;
@@ -36,10 +37,31 @@ public class MakeMkvOutputHandler
             if (m.Success && double.TryParse(m.Groups[1].Value, out var raw))
             {
                 double bytesProcessed = raw;
-                if (_expectedBytes > 0 && bytesProcessed <= 1.0)
-                    bytesProcessed *= _expectedBytes; // fraction -> bytes
-                bytesProcessed = Math.Max(0, _expectedBytes > 0 ? Math.Min(_expectedBytes, bytesProcessed) : bytesProcessed);
-                _task.Value = (long)bytesProcessed;
+                double fraction = 0;
+
+                if (_expectedBytes > 0)
+                {
+                    if (bytesProcessed <= 1.0)
+                        bytesProcessed *= _expectedBytes; // fraction -> bytes
+                    bytesProcessed = Math.Clamp(bytesProcessed, 0, _expectedBytes);
+                    fraction = _expectedBytes > 0 ? bytesProcessed / _expectedBytes : 0;
+                }
+                else
+                {
+                    // When size is unknown, PRGV can be 0..1 (fraction) or 0..100 (percent)
+                    if (bytesProcessed <= 1.0)
+                    {
+                        fraction = Math.Clamp(bytesProcessed, 0, 1);
+                    }
+                    else if (bytesProcessed <= 100.0)
+                    {
+                        fraction = Math.Clamp(bytesProcessed / 100.0, 0, 1);
+                    }
+                }
+
+                LastProgressFraction = fraction;
+                if (_task != null)
+                    _task.Value = (long)bytesProcessed;
                 LastBytesProcessed = bytesProcessed;
                 TryAppend(_progressLogPath, $"PRGV {bytesProcessed:F0}\n");
             }
@@ -49,7 +71,8 @@ public class MakeMkvOutputHandler
             var caption = MakeMkvProtocol.ExtractQuoted(line);
             if (!string.IsNullOrEmpty(caption))
             {
-                _task.Description = $"[{ConsoleColors.Success}]{caption} ({_index + 1}/{_totalTitles})[/]";
+                if (_task != null)
+                    _task.Description = $"[{ConsoleColors.Success}]{caption} ({_index + 1}/{_totalTitles})[/]";
             }
             TryAppend(_progressLogPath, $"PRGC {caption}\n");
         }

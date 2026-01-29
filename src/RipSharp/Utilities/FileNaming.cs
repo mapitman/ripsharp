@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 
 namespace RipSharp.Utilities;
@@ -12,8 +13,11 @@ public static class FileNaming
         return s.Trim();
     }
 
-    public static string RenameFile(string filePath, ContentMetadata? metadata, int? episodeNum, int seasonNum, string? versionSuffix = null, string? episodeTitle = null)
+    public static string RenameFile(string filePath, ContentMetadata metadata, int? episodeNum, int seasonNum, string? versionSuffix = null, string? episodeTitle = null)
     {
+        if (metadata is null) throw new ArgumentNullException(nameof(metadata));
+        if (string.IsNullOrWhiteSpace(metadata.Title)) throw new ArgumentException("Metadata title cannot be null or empty", nameof(metadata));
+
         var title = metadata.Title.Trim();
         var year = metadata.Year;
         var mediaType = metadata.Type;
