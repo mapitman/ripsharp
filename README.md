@@ -216,7 +216,7 @@ graph TD
     F --> H["Rip with MakeMKV<br/>Highest Quality"]
     G --> H
     H --> I["Select Tracks<br/>English Audio/Subtitles"]
-    I --> J["Generate Filename<br/>Title Year or<br/>Show - S##E## - Title"]
+    I --> J["Generate Filename<br/>Title (Year) or<br/>Show - S##E## - Title"]
     J --> K["Save to Output<br/>Directory"]
     K --> L["Complete ✓"]
 ```
