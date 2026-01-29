@@ -17,18 +17,20 @@ namespace RipSharp.Core;
 
 public class Program
 {
+    private static CancellationTokenSource? _cancellationTokenSource;
+
     public static async Task<int> Main(string[] args)
     {
         // Manage cursor visibility for entire application lifetime
         using var cursorManager = new CursorManager();
+        _cancellationTokenSource = new CancellationTokenSource();
 
         // Register handlers for graceful shutdown
         Console.CancelKeyPress += (sender, e) =>
         {
-            e.Cancel = true;  // Prevent immediate termination, we'll handle exit explicitly
+            e.Cancel = true;  // Prevent immediate termination, allow graceful shutdown
             cursorManager.RestoreCursor();
-            AnsiConsole.MarkupLine($"\n[{ConsoleColors.Warning}]⚠️  Operation interrupted by user[/]");
-            Environment.Exit(130);  // Exit with signal code for SIGINT
+            _cancellationTokenSource?.Cancel();
         };
 
         AppDomain.CurrentDomain.ProcessExit += (sender, e) =>
@@ -104,7 +106,17 @@ public class Program
 
         var ripper = host.Services.GetRequiredService<IDiscRipper>();
         var writer = host.Services.GetRequiredService<IConsoleWriter>();
-        var files = await ripper.ProcessDiscAsync(options);
+        
+        List<string> files;
+        try
+        {
+            files = await ripper.ProcessDiscAsync(options, _cancellationTokenSource!.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            writer.Warning("\n⚠️  Operation interrupted by user");
+            return 130;
+        }
 
         if (files.Count > 0)
         {

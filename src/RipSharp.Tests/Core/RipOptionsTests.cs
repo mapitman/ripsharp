@@ -543,4 +543,23 @@ public class RipOptionsTests
         result.Season.Should().Be(1);
         result.EpisodeStart.Should().Be(1);
     }
-}
+
+    [Fact]
+    public void ParseArgs_WithoutSequentialFlag_EnablesParallelProcessingByDefault()
+    {
+        var args = new[] { "--output", "/tmp/movies" };
+
+        var result = RipOptions.ParseArgs(args);
+
+        result.EnableParallelProcessing.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ParseArgs_WithSequentialFlag_DisablesParallelProcessing()
+    {
+        var args = new[] { "--output", "/tmp/movies", "--sequential" };
+
+        var result = RipOptions.ParseArgs(args);
+
+        result.EnableParallelProcessing.Should().BeFalse();
+    }}
