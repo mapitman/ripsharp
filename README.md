@@ -206,7 +206,10 @@ The application:
 6. **Renames & saves** - Moves to output directory with proper naming; auto-cleans temporary directory after successful completion
 
 ```mermaid
+%%{init: {"theme": "base", "themeVariables": {"primaryColor": "#ffffff", "primaryTextColor": "#111111", "primaryBorderColor": "#111111", "secondaryColor": "#ffffff", "tertiaryColor": "#ffffff", "textColor": "#111111", "lineColor": "#111111", "edgeLabelBackground": "#ffffff", "noteBkgColor": "#ffffff", "noteTextColor": "#111111", "fontSize": "18px"}, "flowchart": {"curve": "linear"}}}%%
 graph TD
+   classDef default fill:#ffffff,stroke:#111111,color:#111111,stroke-width:2px;
+   linkStyle default stroke:#111111,stroke-width:2px;
     A["Insert Disc"] --> B["Scan Disc<br/>makemkvcon info"]
     B --> C{"Detect<br/>Content Type"}
     C -->|Movie| D["Identify Main Feature<br/>45+ minutes"]
