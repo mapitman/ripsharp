@@ -2,6 +2,8 @@
 
 Automatic DVD, Blu-Ray, and UltraHD Blu-Ray ripping tool with intelligent metadata lookup and file organization.
 
+![RipSharp Demo](demo.png)
+
 ## Quick Start
 
 ### 1) Install MakeMKV, FFmpeg, and .NET SDK 10+
@@ -63,6 +65,27 @@ This will:
 3. Look up episode titles from TVDB (if API key provided)
 4. Rip each episode with English audio/subtitles
 5. Save as `~/TV/Breaking Bad - S01E01 - Pilot.mkv`, etc.
+
+## Features
+
+### Real-Time Progress Display
+
+RipSharp provides a real-time three-bar progress display showing:
+- **Ripping Progress** - Current disc title being ripped (0-100% per title, not cumulative)
+- **Encoding Progress** - Current video being encoded with real-time speed and ETA
+- **Overall Progress** - Total completion across all titles
+
+Each bar displays elapsed and remaining time in MM:SS or H:MM:SS format for accurate time estimation.
+
+### Automatic Cleanup
+
+Temporary directories created by RipSharp are automatically removed after successful ripping and encoding. Only manually specified temp directories are preserved.
+
+### Parallel Processing
+
+RipSharp rips and encodes titles in parallel for improved performance:
+- While one title is being ripped, the previous title's MKV can be encoded simultaneously
+- Graceful handling of Ctrl+C with proper cursor restoration and cleanup
 
 ## Command-Line Options
 
@@ -178,9 +201,25 @@ The application:
 1. **Scans disc** - Uses `makemkvcon` to identify all titles and their properties
 2. **Identifies content** - Finds the main feature (movies) or episodes (TV series)
 3. **Looks up metadata** - Queries OMDB then TMDB for official titles and years; queries TVDB for TV episode titles
-4. **Rips titles** - Extracts using MakeMKV at highest available quality
+4. **Rips & encodes** - Extracts using MakeMKV at highest available quality; ripping and encoding happen in parallel for efficiency
 5. **Selects tracks** - Includes English audio and subtitles only
-6. **Renames & saves** - Moves to output directory with proper naming
+6. **Renames & saves** - Moves to output directory with proper naming; auto-cleans temporary directory after successful completion
+
+```mermaid
+graph TD
+    A["Insert Disc"] --> B["Scan Disc<br/>makemkvcon info"]
+    B --> C{"Detect<br/>Content Type"}
+    C -->|Movie| D["Identify Main Feature<br/>45+ minutes"]
+    C -->|TV Series| E["Identify Episodes<br/>20-50 minutes each"]
+    D --> F["Query Metadata<br/>OMDB/TMDB"]
+    E --> G["Query Metadata<br/>OMDB/TMDB + TVDB"]
+    F --> H["Rip with MakeMKV<br/>Highest Quality"]
+    G --> H
+    H --> I["Select Tracks<br/>English Audio/Subtitles"]
+    I --> J["Generate Filename<br/>Title (Year) or<br/>Show - S##E## - Title"]
+    J --> K["Save to Output<br/>Directory"]
+    K --> L["Complete ✓"]
+```
 
 ### File Naming
 
