@@ -518,7 +518,8 @@ public class DiscRipper : IDiscRipper
 
                     var fractionalProgress = (long)Math.Round(fraction * RipProgressScale);
                     ripProgress.Value = fractionalProgress; // Show only current track progress (0-100%)
-                    overallProgress.Value = baseProgressOverall + fractionalProgress;
+                    var newOverall = baseProgressOverall + fractionalProgress;
+                    overallProgress.Value = Math.Max(overallProgress.Value, newOverall);
                     
                 }
                 catch (Exception ex)
