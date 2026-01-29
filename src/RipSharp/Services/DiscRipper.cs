@@ -62,16 +62,8 @@ public class DiscRipper : IDiscRipper
     public async Task<List<string>> ProcessDiscAsync(RipOptions options, CancellationToken cancellationToken = default)
     {
         PrepareDirectories(options);
-        // Try writing to current directory
-        File.AppendAllText("ripsharp_debug.log", $"[ProcessDiscAsync START] temp={options.Temp}, EnableParallelProcessing={options.EnableParallelProcessing}\n");
-        var debugPath = Path.Combine(options.Temp!, "main_flow.log");
-        File.AppendAllText(debugPath, $"[ProcessDiscAsync START] temp={options.Temp}, EnableParallelProcessing={options.EnableParallelProcessing}\n");
-        
         var (discInfo, metadata) = await ScanDiscAndLookupMetadata(options);
-        File.AppendAllText(debugPath, $"[ProcessDiscAsync] After ScanDiscAndLookupMetadata\n");
-        
         var titleIds = IdentifyTitlesToRip(discInfo, options);
-        File.AppendAllText(debugPath, $"[ProcessDiscAsync] titleIds.Count={titleIds.Count}\n");
         
         if (titleIds.Count == 0)
         {
@@ -86,14 +78,11 @@ public class DiscRipper : IDiscRipper
         }
 
         _notifier.Accent($"Found {titleIds.Count} title(s) to rip: [{string.Join(", ", titleIds)}]");
-        File.AppendAllText(debugPath, $"[ProcessDiscAsync] About to call ProcessDiscParallel/Sequential\n");
 
         // Use parallel processing by default
         var finalFiles = options.EnableParallelProcessing
             ? await ProcessDiscParallelAsync(discInfo, titleIds, metadata, options, cancellationToken)
             : await ProcessDiscSequentialAsync(discInfo, titleIds, metadata, options, cancellationToken);
-        
-        File.AppendAllText(debugPath, $"[ProcessDiscAsync] After ProcessDiscParallel/Sequential, finalFiles.Count={finalFiles.Count}\n");
 
         if (finalFiles.Count > 0)
         {
@@ -168,9 +157,6 @@ public class DiscRipper : IDiscRipper
 
     private async Task<List<string>> ProcessDiscParallelAsync(DiscInfo discInfo, List<int> titleIds, ContentMetadata metadata, RipOptions options, CancellationToken cancellationToken)
     {
-        var debugPath = Path.Combine(options.Temp!, "process_parallel.log");
-        File.AppendAllText(debugPath, $"[ProcessDiscParallelAsync START] titleIds.Count={titleIds.Count}\n");
-        
         var ripChannel = Channel.CreateUnbounded<RipJob>();
         var resultChannel = Channel.CreateUnbounded<EncodeResult>();
         var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -179,26 +165,20 @@ public class DiscRipper : IDiscRipper
 
         try
         {
-            File.AppendAllText(debugPath, $"[ProcessDiscParallelAsync] Before ExecuteAsync\n");
             await _progressDisplay.ExecuteAsync(async ctx =>
             {
-                File.AppendAllText(debugPath, $"[ProcessDiscParallelAsync] Inside ExecuteAsync\n");
                 var ripProgress = ctx.AddTask("Ripping", maxValue: RipProgressScale); // Per-track progress (0-100)
                 var encodeProgress = ctx.AddTask("Encoding", maxValue: RipProgressScale); // Per-encode progress (0-100)
                 encodeProgress.AddMessage("Waiting for rip to complete...");
                 var overallProgress = ctx.AddTask("Overall", maxValue: titleIds.Count * RipProgressScale * 2);
-                File.AppendAllText(debugPath, $"[ProcessDiscParallelAsync] Created progress bars\n");
 
                 // Start both ripping and encoding tasks in parallel
                 var ripTask = Task.Run(() => RipProducerAsync(ripChannel, discInfo, titleIds, titlePlans, options, ripProgress, overallProgress, cts.Token));
-                var encodeTask = Task.Run(() => EncodeConsumerAsync(ripChannel, resultChannel, discInfo, titleIds, titlePlans, metadata, options, encodeProgress, overallProgress, cts.Token));
+                var encodeTask = Task.Run(() => EncodeConsumerAsync(ripChannel, resultChannel, titlePlans, metadata, options, encodeProgress, overallProgress, cts.Token));
                 var collectTask = CollectResultsAsync(resultChannel, titleIds.Count, cts.Token);
-                
-                File.AppendAllText(debugPath, $"[ProcessDiscParallelAsync] Started both ripTask and encodeTask in parallel\n");
 
                 // Wait for both to complete
                 await Task.WhenAll(ripTask, encodeTask);
-                File.AppendAllText(debugPath, $"[ProcessDiscParallelAsync] Ripping and encoding complete\n");
 
                 // Stop progress bars
                 ripProgress.StopTask();
@@ -207,20 +187,12 @@ public class DiscRipper : IDiscRipper
                 
                 finalFiles = await collectTask;
             });
-            
-            File.AppendAllText(debugPath, $"[ProcessDiscParallelAsync] After ExecuteAsync, finalFiles.Count={finalFiles.Count}\n");
 
             return finalFiles;
         }
-        catch (OperationCanceledException ex)
+        catch (OperationCanceledException)
         {
-            File.AppendAllText(debugPath, $"[ProcessDiscParallelAsync ERROR CANCELLED] {ex.Message}\n");
             throw; // Re-throw to let Program.cs handle the message
-        }
-        catch (Exception ex)
-        {
-            File.AppendAllText(debugPath, $"[ProcessDiscParallelAsync ERROR] {ex.GetType().Name}: {ex.Message}\n");
-            throw;
         }
         finally
         {
@@ -390,12 +362,8 @@ public class DiscRipper : IDiscRipper
     {
         try
         {
-            var debugLog = Path.Combine(options.Temp!, "rip_producer.log");
-            File.AppendAllText(debugLog, $"[RipProducerAsync START] temp={options.Temp}, exists={Directory.Exists(options.Temp)}\n");
-            
             var totalTitles = titleIds.Count;
             var preExistingRips = new Queue<string>(Directory.Exists(options.Temp!) ? Directory.EnumerateFiles(options.Temp!, "*.mkv").OrderBy(File.GetCreationTime) : Enumerable.Empty<string>());
-            File.AppendAllText(debugLog, $"[RipProducerAsync] preExistingRips.Count={preExistingRips.Count}\n");
 
             for (int idx = 0; idx < titleIds.Count; idx++)
             {
@@ -403,6 +371,15 @@ public class DiscRipper : IDiscRipper
 
                 var titleId = titleIds[idx];
                 var titleInfo = discInfo.Titles.FirstOrDefault(t => t.Id == titleId);
+                
+                if (titleInfo == null)
+                {
+                    var msg = $"Title {titleId} not found in disc info, skipping";
+                    ripProgress.AddMessage(msg);
+                    overallProgress.Value += RipProgressScale;
+                    continue;
+                }
+
                 var plan = plans[idx];
 
                 // Check for pre-existing rips
@@ -412,7 +389,7 @@ public class DiscRipper : IDiscRipper
                     var msg = $"Using existing ripped file for title {idx + 1} of {totalTitles}: {plan.DisplayName} (Title ID: {titleId}) -> {Path.GetFileName(reused)}";
                     ripProgress.AddMessage(msg);
 
-                    await ripChannel.Writer.WriteAsync(new RipJob(titleId, idx, reused, titleInfo!), cancellationToken);
+                    await ripChannel.Writer.WriteAsync(new RipJob(titleId, idx, reused, titleInfo), cancellationToken);
                     ripProgress.Description = $"{plan.DisplayName} [100%]";
                     ripProgress.Value += RipProgressScale;
                     overallProgress.Value += RipProgressScale;
@@ -420,30 +397,22 @@ public class DiscRipper : IDiscRipper
                 }
 
                 // Perform actual rip with live progress contribution
-                File.AppendAllText(debugLog, $"[RipProducerAsync] Starting PerformSingleRipAsync for title {titleId} (idx={idx})\n");
                 var rippedPath = await PerformSingleRipAsync(titleId, idx, titleInfo, plan, totalTitles, options, ripProgress, overallProgress);
-                File.AppendAllText(debugLog, $"[RipProducerAsync] PerformSingleRipAsync completed, rippedPath={rippedPath}, writing to channel\n");
 
                 if (!string.IsNullOrEmpty(rippedPath))
                 {
-                    File.AppendAllText(debugLog, $"[RipProducerAsync] Writing RipJob to channel for title {titleId}\n");
-                    await ripChannel.Writer.WriteAsync(new RipJob(titleId, idx, rippedPath, titleInfo!), cancellationToken);
-                    File.AppendAllText(debugLog, $"[RipProducerAsync] RipJob written successfully\n");
+                    await ripChannel.Writer.WriteAsync(new RipJob(titleId, idx, rippedPath, titleInfo), cancellationToken);
                 }
                 else
                 {
                     var msg = $"Failed to rip title {titleId}, skipping";
                     ripProgress.AddMessage(msg);
-                    File.AppendAllText(debugLog, $"[RipProducerAsync] {msg}\n");
                 }
             }
         }
         finally
         {
-            var debugLog = Path.Combine(options.Temp!, "rip_producer.log");
-            File.AppendAllText(debugLog, $"[RipProducerAsync FINALLY] Completing ripChannel\n");
             ripChannel.Writer.Complete();
-            File.AppendAllText(debugLog, $"[RipProducerAsync FINALLY] ripChannel completed\n");
         }
     }
 
@@ -587,25 +556,20 @@ public class DiscRipper : IDiscRipper
         return rippedPath;
     }
 
-    private async Task EncodeConsumerAsync(Channel<RipJob> ripChannel, Channel<EncodeResult> resultChannel, DiscInfo discInfo, List<int> titleIds, IReadOnlyList<TitlePlan> titlePlans, ContentMetadata metadata, RipOptions options, IProgressTask encodeProgress, IProgressTask overallProgress, CancellationToken cancellationToken)
+    private async Task EncodeConsumerAsync(Channel<RipJob> ripChannel, Channel<EncodeResult> resultChannel, IReadOnlyList<TitlePlan> titlePlans, ContentMetadata metadata, RipOptions options, IProgressTask encodeProgress, IProgressTask overallProgress, CancellationToken cancellationToken)
     {
         try
         {
-            var debugLog = Path.Combine(options.Temp!, "encode_consumer.log");
-            File.AppendAllText(debugLog, $"[EncodeConsumerAsync START]\n");
-            
-            var totalTitles = titleIds.Count;
+            var totalTitles = titlePlans.Count;
             int processedCount = 0;
             var planLookup = titlePlans.ToDictionary(p => p.TitleId);
 
             await foreach (var ripJob in ripChannel.Reader.ReadAllAsync(cancellationToken))
             {
                 processedCount++;
-                File.AppendAllText(debugLog, $"[EncodeConsumerAsync] Received ripJob for title {ripJob.TitleId}, processedCount={processedCount}\n");
 
                 if (!planLookup.TryGetValue(ripJob.TitleId, out var plan))
                 {
-                    File.AppendAllText(debugLog, $"[EncodeConsumerAsync] Missing plan for title {ripJob.TitleId}\n");
                     await resultChannel.Writer.WriteAsync(new EncodeResult(ripJob.TitleId, false, ErrorMessage: $"Missing plan for title {ripJob.TitleId}"), cancellationToken);
                     overallProgress.Value += RipProgressScale;
                     continue;
@@ -623,7 +587,6 @@ public class DiscRipper : IDiscRipper
 
                 var encMsg = $"Encoding ({processedCount}/{totalTitles}): {plan.FinalFileName}";
                 encodeProgress.AddMessage(encMsg);
-                File.AppendAllText(debugLog, $"[EncodeConsumerAsync] Starting encode: {encMsg}\n");
 
                 // Perform encoding
                 var success = await _encoder.EncodeAsync(
@@ -633,8 +596,6 @@ public class DiscRipper : IDiscRipper
                     ordinal: processedCount,
                     total: totalTitles,
                     progressTask: encodeProgress);
-
-                File.AppendAllText(debugLog, $"[EncodeConsumerAsync] Encode completed for title {ripJob.TitleId}, success={success}\n");
 
                 if (success)
                 {
@@ -660,8 +621,6 @@ public class DiscRipper : IDiscRipper
                     overallProgress.Value += RipProgressScale;
                 }
             }
-
-            File.AppendAllText(debugLog, $"[EncodeConsumerAsync] Channel completed, finalizing\n");
 
             // Ensure the encoding bar completes if it was created
             if (encodeProgress != null)

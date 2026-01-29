@@ -38,6 +38,16 @@ public interface IProgressTask
     long MaxValue { get; }
 
     /// <summary>
+    /// Gets whether the task has been stopped.
+    /// </summary>
+    bool IsStopped { get; }
+
+    /// <summary>
+    /// Gets the elapsed time since the task started.
+    /// </summary>
+    TimeSpan GetElapsed();
+
+    /// <summary>
     /// Increment the current value by the specified amount.
     /// </summary>
     void Increment(long value);
@@ -61,4 +71,9 @@ public interface IProgressTask
     /// Clears all messages from this task's panel.
     /// </summary>
     void ClearMessages();
+
+    /// <summary>
+    /// Gets the most recent messages, limited to the specified count.
+    /// </summary>
+    List<string> GetRecentMessages(int count);
 }
