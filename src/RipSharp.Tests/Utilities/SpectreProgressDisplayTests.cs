@@ -53,6 +53,25 @@ public class SpectreProgressDisplayTests
         GetElapsed(task).Should().BeCloseTo(stopTime!.Value - startTime, precision: TimeSpan.FromSeconds(0.25));
     }
 
+    [Fact]
+    public void StopTask_DoesNotOverwriteStopTime()
+    {
+        var task = CreateLiveTask("Test", 100);
+        var startTime = DateTime.UtcNow - TimeSpan.FromSeconds(9);
+        var firstStopTime = DateTime.UtcNow - TimeSpan.FromSeconds(4);
+
+        SetTaskValue(task, 1);
+        SetPrivateField(task, "_startTime", startTime);
+        SetPrivateField(task, "_stopTime", firstStopTime);
+        SetPrivateField(task, "_isStopped", true);
+
+        Invoke(task, "StopTask");
+
+        var stopTime = (DateTime?)GetPrivateField(task, "_stopTime");
+        stopTime.Should().Be(firstStopTime);
+        GetElapsed(task).Should().BeCloseTo(firstStopTime - startTime, precision: TimeSpan.FromSeconds(0.25));
+    }
+
     private static string InvokeFormatTimeSpan(TimeSpan value)
     {
         var method = typeof(SpectreProgressDisplay)
