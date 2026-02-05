@@ -270,6 +270,10 @@ public class SpectreProgressDisplay : IProgressDisplay
         {
             lock (_lock)
             {
+                if (_isStopped)
+                {
+                    return;
+                }
                 _value = _maxValue;
                 _isStopped = true;
                 _stopTime = DateTime.UtcNow;
