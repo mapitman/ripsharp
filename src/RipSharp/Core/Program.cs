@@ -10,6 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
 using NetEscapades.Configuration.Yaml;
+
 using Spectre.Console;
 
 
@@ -106,7 +107,7 @@ public class Program
 
         var ripper = host.Services.GetRequiredService<IDiscRipper>();
         var writer = host.Services.GetRequiredService<IConsoleWriter>();
-        
+
         List<string> files;
         try
         {
