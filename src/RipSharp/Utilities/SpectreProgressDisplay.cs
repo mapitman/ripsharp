@@ -1,10 +1,11 @@
-using Spectre.Console;
-using Spectre.Console.Rendering;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+
+using Spectre.Console;
+using Spectre.Console.Rendering;
 
 namespace RipSharp.Utilities;
 
@@ -108,9 +109,9 @@ public class SpectreProgressDisplay : IProgressDisplay
 
         // Calculate elapsed and remaining time
         var elapsed = task.GetElapsed();
-        var elapsedStr = elapsed.TotalSeconds > 0 ? FormatTimeSpan(elapsed) : "00:00";
-        var remainingStr = "--:--";
-        
+        var elapsedStr = elapsed.TotalSeconds > 0 ? FormatTimeSpan(elapsed) : "00:00:00";
+        var remainingStr = "--:--:--";
+
         if (percent > 0.05 && !task.IsStopped) // Only estimate if we have meaningful progress (>5%)
         {
             var totalEstimated = elapsed.TotalSeconds / percent;
@@ -119,7 +120,7 @@ public class SpectreProgressDisplay : IProgressDisplay
         }
         else if (task.IsStopped)
         {
-            remainingStr = "00:00";
+            remainingStr = "00:00:00";
         }
 
         var timeInfo = $"{elapsedStr} / {remainingStr}";
@@ -151,14 +152,7 @@ public class SpectreProgressDisplay : IProgressDisplay
 
     private static string FormatTimeSpan(TimeSpan ts)
     {
-        if (ts.TotalHours >= 1)
-        {
-            return $"{(int)ts.TotalHours}:{ts.Minutes:00}:{ts.Seconds:00}";
-        }
-        else
-        {
-            return $"{ts.Minutes:00}:{ts.Seconds:00}";
-        }
+        return $"{(int)ts.TotalHours:00}:{ts.Minutes:00}:{ts.Seconds:00}";
     }
 
     private class LiveProgressContext : IProgressContext
@@ -198,6 +192,7 @@ public class SpectreProgressDisplay : IProgressDisplay
         private readonly List<string> _messages = new();
         private bool _isStopped;
         private DateTime? _startTime;
+        private DateTime? _stopTime;
 
         public LiveTask(string description, long maxValue)
         {
@@ -219,24 +214,34 @@ public class SpectreProgressDisplay : IProgressDisplay
                 {
                     return TimeSpan.Zero;
                 }
-                return DateTime.UtcNow - _startTime.Value;
+                var endTime = _stopTime ?? DateTime.UtcNow;
+                return endTime - _startTime.Value;
             }
         }
 
         public long Value
         {
             get { lock (_lock) { return _value; } }
-            set 
-            { 
-                lock (_lock) 
-                { 
+            set
+            {
+                lock (_lock)
+                {
+                    if (value <= 0)
+                    {
+                        _value = 0;
+                        _startTime = null;
+                        _stopTime = null;
+                        _isStopped = false;
+                        return;
+                    }
                     // Start tracking time when task first gets progress
                     if (_startTime == null && value > 0)
                     {
                         _startTime = DateTime.UtcNow;
+                        _stopTime = null;
                     }
-                    _value = Math.Min(value, _maxValue); 
-                } 
+                    _value = Math.Min(value, _maxValue);
+                }
             }
         }
 
@@ -267,6 +272,7 @@ public class SpectreProgressDisplay : IProgressDisplay
             {
                 _value = _maxValue;
                 _isStopped = true;
+                _stopTime = DateTime.UtcNow;
             }
         }
 

@@ -42,9 +42,20 @@ public class MakeMkvOutputHandler
                 if (_expectedBytes > 0)
                 {
                     if (bytesProcessed <= 1.0)
-                        bytesProcessed *= _expectedBytes; // fraction -> bytes
-                    bytesProcessed = Math.Clamp(bytesProcessed, 0, _expectedBytes);
-                    fraction = _expectedBytes > 0 ? bytesProcessed / _expectedBytes : 0;
+                    {
+                        fraction = Math.Clamp(bytesProcessed, 0, 1);
+                        bytesProcessed = fraction * _expectedBytes; // fraction -> bytes
+                    }
+                    else if (bytesProcessed <= 100.0 && _expectedBytes >= 1024 * 1024)
+                    {
+                        fraction = Math.Clamp(bytesProcessed / 100.0, 0, 1);
+                        bytesProcessed = fraction * _expectedBytes; // percent -> bytes
+                    }
+                    else
+                    {
+                        bytesProcessed = Math.Clamp(bytesProcessed, 0, _expectedBytes);
+                        fraction = _expectedBytes > 0 ? bytesProcessed / _expectedBytes : 0;
+                    }
                 }
                 else
                 {

@@ -22,7 +22,7 @@ build: restore
 	dotnet build RipSharp.sln
 
 # Run code formatter
-format: restore
+format: 
 	dotnet format RipSharp.sln
 
 # Run tests

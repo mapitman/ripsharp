@@ -6,8 +6,10 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
-using Spectre.Console;
+
 using RipSharp.Abstractions;
+
+using Spectre.Console;
 
 
 namespace RipSharp.Services;
@@ -64,7 +66,7 @@ public class DiscRipper : IDiscRipper
         PrepareDirectories(options);
         var (discInfo, metadata) = await ScanDiscAndLookupMetadata(options);
         var titleIds = IdentifyTitlesToRip(discInfo, options);
-        
+
         if (titleIds.Count == 0)
         {
             _notifier.Error("No suitable titles found on disc");
@@ -170,11 +172,12 @@ public class DiscRipper : IDiscRipper
                 var ripProgress = ctx.AddTask("Ripping", maxValue: RipProgressScale); // Per-track progress (0-100)
                 var encodeProgress = ctx.AddTask("Encoding", maxValue: RipProgressScale); // Per-encode progress (0-100)
                 encodeProgress.AddMessage("Waiting for rip to complete...");
-                var overallProgress = ctx.AddTask("Overall", maxValue: titleIds.Count * RipProgressScale * 2);
+                var overallProgress = ctx.AddTask("Overall", maxValue: titleIds.Count * 2);
+                var overallTracker = new OverallProgressTracker(overallProgress);
 
                 // Start both ripping and encoding tasks in parallel
-                var ripTask = Task.Run(() => RipProducerAsync(ripChannel, discInfo, titleIds, titlePlans, options, ripProgress, overallProgress, cts.Token));
-                var encodeTask = Task.Run(() => EncodeConsumerAsync(ripChannel, resultChannel, titlePlans, metadata, options, encodeProgress, overallProgress, cts.Token));
+                var ripTask = Task.Run(() => RipProducerAsync(ripChannel, discInfo, titleIds, titlePlans, options, ripProgress, overallTracker, cts.Token));
+                var encodeTask = Task.Run(() => EncodeConsumerAsync(ripChannel, resultChannel, titlePlans, metadata, options, encodeProgress, overallTracker, cts.Token));
                 var collectTask = CollectResultsAsync(resultChannel, titleIds.Count, cts.Token);
 
                 // Wait for both to complete
@@ -184,7 +187,7 @@ public class DiscRipper : IDiscRipper
                 ripProgress.StopTask();
                 encodeProgress.StopTask();
                 overallProgress.StopTask();
-                
+
                 finalFiles = await collectTask;
             });
 
@@ -358,11 +361,13 @@ public class DiscRipper : IDiscRipper
         return rippedFilesMap;
     }
 
-    private async Task RipProducerAsync(Channel<RipJob> ripChannel, DiscInfo discInfo, List<int> titleIds, IReadOnlyList<TitlePlan> plans, RipOptions options, IProgressTask ripProgress, IProgressTask overallProgress, CancellationToken cancellationToken)
+    private async Task RipProducerAsync(Channel<RipJob> ripChannel, DiscInfo discInfo, List<int> titleIds, IReadOnlyList<TitlePlan> plans, RipOptions options, IProgressTask ripProgress, OverallProgressTracker overallTracker, CancellationToken cancellationToken)
     {
         try
         {
             var totalTitles = titleIds.Count;
+            var ripStartTime = DateTime.UtcNow;
+            var rippedCount = 0;
             var preExistingRips = new Queue<string>(Directory.Exists(options.Temp!) ? Directory.EnumerateFiles(options.Temp!, "*.mkv").OrderBy(File.GetCreationTime) : Enumerable.Empty<string>());
 
             for (int idx = 0; idx < titleIds.Count; idx++)
@@ -371,12 +376,13 @@ public class DiscRipper : IDiscRipper
 
                 var titleId = titleIds[idx];
                 var titleInfo = discInfo.Titles.FirstOrDefault(t => t.Id == titleId);
-                
+
                 if (titleInfo == null)
                 {
                     var msg = $"Title {titleId} not found in disc info, skipping";
                     ripProgress.AddMessage(msg);
-                    overallProgress.Value += RipProgressScale;
+                    overallTracker.MarkRipComplete();
+                    overallTracker.MarkEncodeComplete();
                     continue;
                 }
 
@@ -392,22 +398,36 @@ public class DiscRipper : IDiscRipper
                     await ripChannel.Writer.WriteAsync(new RipJob(titleId, idx, reused, titleInfo), cancellationToken);
                     ripProgress.Description = $"{plan.DisplayName} [100%]";
                     ripProgress.Value += RipProgressScale;
-                    overallProgress.Value += RipProgressScale;
+                    rippedCount++;
+                    overallTracker.MarkRipComplete();
                     continue;
                 }
 
                 // Perform actual rip with live progress contribution
-                var rippedPath = await PerformSingleRipAsync(titleId, idx, titleInfo, plan, totalTitles, options, ripProgress, overallProgress);
+                var rippedPath = await PerformSingleRipAsync(titleId, idx, titleInfo, plan, totalTitles, options, ripProgress);
 
                 if (!string.IsNullOrEmpty(rippedPath))
                 {
                     await ripChannel.Writer.WriteAsync(new RipJob(titleId, idx, rippedPath, titleInfo), cancellationToken);
+                    rippedCount++;
+                    overallTracker.MarkRipComplete();
                 }
                 else
                 {
                     var msg = $"Failed to rip title {titleId}, skipping";
                     ripProgress.AddMessage(msg);
+                    overallTracker.MarkRipComplete();
+                    overallTracker.MarkEncodeComplete();
                 }
+            }
+
+            if (!cancellationToken.IsCancellationRequested)
+            {
+                var elapsed = DateTime.UtcNow - ripStartTime;
+                var summary = BuildRipCompletionMessage(rippedCount, totalTitles, elapsed);
+                ripProgress.ClearMessages();
+                ripProgress.AddMessage(summary);
+                ripProgress.StopTask();
             }
         }
         finally
@@ -416,14 +436,12 @@ public class DiscRipper : IDiscRipper
         }
     }
 
-    private async Task<string?> PerformSingleRipAsync(int titleId, int idx, TitleInfo? titleInfo, TitlePlan plan, int totalTitles, RipOptions options, IProgressTask ripProgress, IProgressTask overallProgress)
+    private async Task<string?> PerformSingleRipAsync(int titleId, int idx, TitleInfo? titleInfo, TitlePlan plan, int totalTitles, RipOptions options, IProgressTask ripProgress)
     {
-        var baseProgressOverall = idx * RipProgressScale;
-        
         // Reset ripProgress for this track (show 0-100% per track)
         ripProgress.Value = 0;
         ripProgress.ClearMessages(); // Clear messages from previous track
-        
+
         var msg = $"Ripping title {idx + 1} of {totalTitles}: {plan.DisplayName} (Title ID: {titleId}) [{DurationFormatter.Format(titleInfo?.DurationSeconds ?? 0)}]";
         ripProgress.AddMessage(msg);
 
@@ -452,7 +470,7 @@ public class DiscRipper : IDiscRipper
                 try
                 {
                     pollCount++;
-                    
+
                     // Identify MKV being written if we haven't yet
                     if (currentMkv == null)
                     {
@@ -518,9 +536,7 @@ public class DiscRipper : IDiscRipper
 
                     var fractionalProgress = (long)Math.Round(fraction * RipProgressScale);
                     ripProgress.Value = fractionalProgress; // Show only current track progress (0-100%)
-                    var newOverall = baseProgressOverall + fractionalProgress;
-                    overallProgress.Value = Math.Max(overallProgress.Value, newOverall);
-                    
+
                 }
                 catch (Exception ex)
                 {
@@ -560,11 +576,10 @@ public class DiscRipper : IDiscRipper
 
         // Snap progress to the completed title
         ripProgress.Value = RipProgressScale; // Show 100% for current track
-        overallProgress.Value = baseProgressOverall + RipProgressScale;
         return rippedPath;
     }
 
-    private async Task EncodeConsumerAsync(Channel<RipJob> ripChannel, Channel<EncodeResult> resultChannel, IReadOnlyList<TitlePlan> titlePlans, ContentMetadata metadata, RipOptions options, IProgressTask encodeProgress, IProgressTask overallProgress, CancellationToken cancellationToken)
+    private async Task EncodeConsumerAsync(Channel<RipJob> ripChannel, Channel<EncodeResult> resultChannel, IReadOnlyList<TitlePlan> titlePlans, ContentMetadata metadata, RipOptions options, IProgressTask encodeProgress, OverallProgressTracker overallTracker, CancellationToken cancellationToken)
     {
         try
         {
@@ -579,7 +594,7 @@ public class DiscRipper : IDiscRipper
                 if (!planLookup.TryGetValue(ripJob.TitleId, out var plan))
                 {
                     await resultChannel.Writer.WriteAsync(new EncodeResult(ripJob.TitleId, false, ErrorMessage: $"Missing plan for title {ripJob.TitleId}"), cancellationToken);
-                    overallProgress.Value += RipProgressScale;
+                    overallTracker.MarkEncodeComplete();
                     continue;
                 }
 
@@ -617,7 +632,7 @@ public class DiscRipper : IDiscRipper
                         true,
                         finalPath), cancellationToken);
                     encodeProgress.Value = RipProgressScale; // Show 100% for current encode
-                    overallProgress.Value += RipProgressScale;
+                    overallTracker.MarkEncodeComplete();
                 }
                 else
                 {
@@ -626,7 +641,7 @@ public class DiscRipper : IDiscRipper
                         false,
                         ErrorMessage: $"Failed to encode title {ripJob.TitleId}"), cancellationToken);
                     encodeProgress.Value = RipProgressScale; // Show 100% even on failure
-                    overallProgress.Value += RipProgressScale;
+                    overallTracker.MarkEncodeComplete();
                 }
             }
 
@@ -634,13 +649,63 @@ public class DiscRipper : IDiscRipper
             if (encodeProgress != null)
             {
                 encodeProgress.Value = encodeProgress.MaxValue;
-                overallProgress.Value = overallProgress.MaxValue;
+                overallTracker.MarkAllComplete();
             }
         }
         finally
         {
             resultChannel.Writer.Complete();
         }
+    }
+
+    private sealed class OverallProgressTracker
+    {
+        private readonly IProgressTask _overallTask;
+        private readonly object _lock = new();
+        private int _completedRips;
+        private int _completedEncodes;
+
+        public OverallProgressTracker(IProgressTask overallTask)
+        {
+            _overallTask = overallTask;
+        }
+
+        public void MarkRipComplete()
+        {
+            lock (_lock)
+            {
+                _completedRips++;
+                UpdateValue();
+            }
+        }
+
+        public void MarkEncodeComplete()
+        {
+            lock (_lock)
+            {
+                _completedEncodes++;
+                UpdateValue();
+            }
+        }
+
+        public void MarkAllComplete()
+        {
+            lock (_lock)
+            {
+                _overallTask.Value = _overallTask.MaxValue;
+            }
+        }
+
+        private void UpdateValue()
+        {
+            _overallTask.Value = _completedRips + _completedEncodes;
+        }
+    }
+
+    private static string BuildRipCompletionMessage(int rippedCount, int totalTitles, TimeSpan elapsed)
+    {
+        var durationText = DurationFormatter.Format((int)Math.Max(0, elapsed.TotalSeconds));
+        return $"Ripping complete: {rippedCount}/{totalTitles} tracks in {durationText}.";
     }
 
     private async Task<List<string>> CollectResultsAsync(Channel<EncodeResult> resultChannel, int expectedCount, CancellationToken cancellationToken)

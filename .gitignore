@@ -6,6 +6,9 @@
 # dotenv files
 .env
 
+# Disc structure dumps
+*.cst
+
 # User-specific files
 *.rsuser
 *.suo

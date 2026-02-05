@@ -562,4 +562,5 @@ public class RipOptionsTests
         var result = RipOptions.ParseArgs(args);
 
         result.EnableParallelProcessing.Should().BeFalse();
-    }}
+    }
+}
