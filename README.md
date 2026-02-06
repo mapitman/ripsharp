@@ -1,316 +1,237 @@
 # RipSharp
 
-Automatic DVD, Blu-Ray, and UltraHD Blu-Ray ripping tool with intelligent metadata lookup and file organization.
+**RipSharp** is a command-line tool for automated optical disc ripping and file naming. It integrates MakeMKV for disc extraction with TMDB, OMDB, and TVDB metadata providers to generate properly organized video files with correct naming and metadata for movies and TV shows. Extracted tracks are re-encoded with FFmpeg using H.264 (slow, CRF 22) for video and AAC for audio, with optional English subtitle embedding.
 
 ![RipSharp Demo](demo.png)
 
-## Quick Start
-
-### 1) Install MakeMKV, FFmpeg, and .NET SDK 10+
-
-See [Requirements](#requirements)
-
-### 2) View help
-
-```bash
-dotnet run --project src/RipSharp -- --help
-```
-
-### 3) Set API keys (optional but recommended)
-
-```bash
-export TMDB_API_KEY="your_key_here"
-export OMDB_API_KEY="your_key_here"
-export TVDB_API_KEY="your_key_here"  # For TV episode titles
-```
-
-### 4) Rip a movie (mode optional; auto-detect is default)
-
-```bash
-dotnet run --project src/RipSharp -- --output ~/Movies
-dotnet run --project src/RipSharp -- --output ~/Movies --mode movie   # explicit
-```
-
-### 5) Rip a TV season
-
-```bash
-dotnet run --project src/RipSharp -- --output ~/TV --mode tv --title "Breaking Bad" --season 1
-```
-
-## Basic Usage
-
-### Movie Ripping
-
-```bash
-# mode optional (auto-detect); set explicitly if you prefer
-dotnet run --project src/RipSharp -- --output ~/Movies --title "The Matrix" --year 1999
-dotnet run --project src/RipSharp -- --output ~/Movies --mode movie --title "The Matrix" --year 1999
-```
-
-This will:
-1. Scan the disc (default: `disc:0`)
-2. Identify the main feature (45+ minutes)
-3. Rip with highest resolution, all English audio/subtitles
-4. Save as `~/Movies/The Matrix (1999).mkv`
-
-### TV Series Ripping
-
-```bash
-dotnet run --project src/RipSharp -- --output ~/TV --mode tv --title "Breaking Bad" --season 1
-```
-
-This will:
-1. Scan the disc
-2. Identify all episodes (20-50 minutes each)
-3. Look up episode titles from TVDB (if API key provided)
-4. Rip each episode with English audio/subtitles
-5. Save as `~/TV/Breaking Bad - S01E01 - Pilot.mkv`, etc.
-
 ## Features
 
-### Real-Time Progress Display
-
-RipSharp provides a real-time three-bar progress display showing:
-- **Ripping Progress** - Current disc title being ripped (0-100% per title, not cumulative)
-- **Encoding Progress** - Current video being encoded with real-time speed and ETA
-- **Overall Progress** - Total completion across all titles
-
-Each bar displays elapsed and remaining time in MM:SS or H:MM:SS format for accurate time estimation.
-
-### Automatic Cleanup
-
-Temporary directories created by RipSharp are automatically removed after successful ripping and encoding. Only manually specified temp directories are preserved.
-
-### Parallel Processing
-
-RipSharp rips and encodes titles in parallel for improved performance:
-- While one title is being ripped, the previous title's MKV can be encoded simultaneously
-- Graceful handling of Ctrl+C with proper cursor restoration and cleanup
-
-## Command-Line Options
-
-| Option | Value | Default | Description |
-|--------|-------|---------|-------------|
-| `--output` | `PATH` | *required* | Output directory for ripped files |
-| `--mode` | `auto\|movie\|tv` | auto | Content type (auto-detect by default) |
-| `--disc` | `disc:N\|/dev/...` | `disc:0` | Optical drive path |
-| `--temp` | `PATH` | `{output}/.makemkv` | Temporary ripping directory |
-| `--title` | `TEXT` | *(disc title)* | Custom title for file naming |
-| `--year` | `YYYY` | *(from metadata)* | Release year (movies only) |
-| `--season` | `N` | `1` | Season number (TV only) |
-| `--episode-start` | `N` | `1` | Starting episode number (TV only) |
-| `--disc-type` | `dvd\|bd\|uhd` | *auto-detect* | Override disc type for size estimation |
-| `--debug` | *(flag)* | false | Enable debug logging |
-| `-h, --help` | *(flag)* | false | Show help message and exit |
-
-## Configuration
-
-### Environment Variables (Recommended)
-
-```bash
-export TMDB_API_KEY="your_tmdb_api_key"      # Primary metadata source
-export OMDB_API_KEY="your_omdb_api_key"      # Fallback metadata source
-export TVDB_API_KEY="your_tvdb_api_key"      # TV episode titles
-```
-
-To make permanent, add to `~/.bashrc`, `~/.zshrc`, or equivalent:
-
-```bash
-# ~/.bashrc or ~/.zshrc
-export TMDB_API_KEY="your_tmdb_api_key"
-export OMDB_API_KEY="your_omdb_api_key"
-export TVDB_API_KEY="your_tvdb_api_key"
-```
-
-### Config File (Alternative)
-
-Edit [src/RipSharp/appsettings.yaml](src/RipSharp/appsettings.yaml):
-
-```yaml
-metadata:
-  lookup_enabled: true
-  omdb_api_key: "your_key"
-  tmdb_api_key: "your_key"
-```
-
-**Note:** Environment variables override config file values.
+- **Automatic disc detection** — Identifies DVD, Blu-ray, and UHD discs
+- **MakeMKV integration** — Extracts titles without quality loss
+- **Multi-provider metadata** — Fetches movie/TV info from TMDB, OMDB, and TVDB
+- **TV episode resolution** — Looks up episode titles for proper naming
+- **H.264 re-encoding** — Compresses video with FFmpeg (CRF 22, slow preset)
+- **Audio handling** — Copies AAC/AC3/EAC3, transcodes others to AAC
+- **English filtering** — Selects English audio tracks and optional subtitles
+- **Smart file naming** — Generates organized filenames with metadata
+- **Progress tracking** — Real-time display for scanning, ripping, and encoding
 
 ## Requirements
 
-### Software Dependencies
+### Software
 
-1. **MakeMKV** - Disc ripping
-   - https://www.makemkv.com/
+- **MakeMKV** – [makemkv.com](https://www.makemkv.com/)
+- **FFmpeg** – See installation options below
+- **.NET SDK 10.0+** – [dotnet.microsoft.com/download](https://dotnet.microsoft.com/download)
 
-2. **FFmpeg** - Media processing
+### API Keys (Optional)
+
+- **TMDB** – [themoviedb.org/settings/api](https://www.themoviedb.org/settings/api) (free)
+- **OMDB** – [omdbapi.com/apikey.aspx](https://www.omdbapi.com/apikey.aspx) (free tier)
+- **TVDB** – [thetvdb.com/dashboard/account/apikeys](https://thetvdb.com/dashboard/account/apikeys) (free)
+
+### Hardware
+
+- Optical disc drive (DVD/Blu-ray/UHD) or ISO file
+- 5–100 GB free disk space per disc
+
+## Quick Start
+
+1. **Install dependencies**
+   
+   Install MakeMKV from https://www.makemkv.com/
+
+   Install FFmpeg (choose one):
+
+   Ubuntu/Debian:
 
    ```bash
-   # Ubuntu/Debian
-   sudo apt-get install ffmpeg
-   
-   # macOS
-   brew install ffmpeg
-   
-   # Fedora
+   sudo apt install ffmpeg
+   ```
+
+   Fedora:
+
+   ```bash
    sudo dnf install ffmpeg
    ```
 
-3. **.NET SDK 10.0+** - Runtime
+   Arch:
 
    ```bash
-   # Check version
-   dotnet --version
+   sudo pacman -S ffmpeg
    ```
+
+   openSUSE:
+
+   ```bash
+   sudo zypper install ffmpeg
+   ```
+
+   Alpine:
+
+   ```bash
+   sudo apk add ffmpeg
+   ```
+
+   macOS (Homebrew):
+
+   ```bash
+   brew install ffmpeg
+   ```
+
+   Windows (winget):
+
+   ```bash
+   winget install --id Gyan.FFmpeg
+   ```
+
+   Install .NET SDK 10.0+ from https://dotnet.microsoft.com/download
+
+2. **Clone and build**
    
-   Get from: https://dotnet.microsoft.com/download
+   ```bash
+   git clone https://github.com/mapitman/ripsharp.git
+   cd ripsharp
+   dotnet build src/RipSharp
+   ```
 
-4. **API Keys** (Optional but recommended)
-   - **TMDB**: https://www.themoviedb.org/settings/api (free)
-   - **OMDB**: https://www.omdbapi.com/apikey.aspx (free tier available)
-   - **TVDB**: https://thetvdb.com/api-information (free for personal use)
+3. **Set API keys** (optional but recommended)
+   
+   ```bash
+   export TMDB_API_KEY="your_key_here"
+   export OMDB_API_KEY="your_key_here"
+   export TVDB_API_KEY="your_key_here"
+   ```
 
-### Hardware Requirements
+4. **Rip a disc**
+   
+   ```bash
+   # Movie from physical disc (auto-detected)
+   dotnet run --project src/RipSharp -- --output ~/Movies
+   
+   # TV series with episode titles
+   dotnet run --project src/RipSharp -- --output ~/TV --mode tv --title "Breaking Bad" --season 1
+   
+   # From ISO file
+   dotnet run --project src/RipSharp -- --output ~/Movies --disc "file:/path/to/movie.iso"
+   ```
 
-- DVD or Blu-Ray drive
-- 5-100 GB free disk space (depending on disc type)
-- Adequate processing power
+## Options
 
-## Installation
+### Required
+
+| Option          | Description                         |
+|:----------------|:------------------------------------|
+| `--output PATH` | Output directory for ripped files   |
+
+### Optional
+
+| Option                   | Description                                                                                           |
+|:-------------------------|:------------------------------------------------------------------------------------------------------|
+| `--mode auto\|movie\|tv` | Content type detection (default: `auto`)                                                              |
+| `--disc PATH`            | Optical drive or ISO file path (default: `disc:0`, e.g., `disc:1`, `/dev/sr0`, `file:movie.iso`)      |
+| `--temp PATH`            | Temporary directory (default: auto-generated in output)                                               |
+| `--title TEXT`           | Custom title for file naming                                                                          |
+| `--year YYYY`            | Release year (movies only)                                                                            |
+| `--season N`             | Season number (TV only, default: `1`)                                                                 |
+| `--episode-start N`      | Starting episode number (TV only, default: `1`)                                                       |
+| `--disc-type TYPE`       | Override disc type: `dvd\|bd\|uhd` (auto-detect by default)                                           |
+| `--sequential`           | Disable parallel processing (rip all, then encode all)                                                |
+| `--debug`                | Enable debug logging                                                                                  |
+| `-h, --help`             | Show help message                                                                                     |
+
+### Environment Variables
+
+| Variable        | Description                                    |
+|:----------------|:-----------------------------------------------|
+| `TMDB_API_KEY`  | TMDB API key for metadata lookup (recommended) |
+| `OMDB_API_KEY`  | OMDB API key for metadata lookup (optional)    |
+| `TVDB_API_KEY`  | TVDB API key for TV episode titles (optional)  |
+
+## Building
 
 ```bash
-git clone https://github.com/mapitman/RipSharp.git
-cd RipSharp
+git clone https://github.com/mapitman/ripsharp.git
+cd ripsharp
 dotnet restore src/RipSharp
 dotnet build src/RipSharp
 ```
 
-Then verify it works (auto-detect by default):
+To run without building separately:
 
 ```bash
-dotnet run --project src/RipSharp -- --output /tmp/test
+dotnet run --project src/RipSharp -- --output ~/Movies
 ```
 
-*The app requires `--output`; `--mode` is optional and defaults to auto-detect (movie vs TV).* See **Command-Line Options** above.
+## Examples
+
+### Movie with Custom Title
+
+```bash
+dotnet run --project src/RipSharp -- --output ~/Movies --title "The Matrix" --year 1999
+```
+
+**Output:** `~/Movies/The Matrix (1999).mkv`
+
+### TV Series Season
+
+```bash
+dotnet run --project src/RipSharp -- --output ~/TV --mode tv --title "Breaking Bad" --season 1
+```
+
+**Output:** `~/TV/Breaking Bad - S01E01 - Pilot.mkv`, `~/TV/Breaking Bad - S01E02 - Cat's in the Bag....mkv`, etc.
+
+### Using Alternate Disc Drive
+
+```bash
+dotnet run --project src/RipSharp -- --output ~/Movies --disc disc:1
+```
+
+### Ripping from ISO File
+
+```bash
+dotnet run --project src/RipSharp -- --output ~/Movies --disc "file:/path/to/movie.iso"
+```
+
+**Output:** Processes the ISO file instead of a physical disc
+
+See [EXAMPLES.md](EXAMPLES.md) for more detailed examples.
+
+## File Naming
+
+RipSharp automatically generates organized filenames based on metadata lookup results.
+
+### Movies
+
+Format: `Title (Year).mkv`
+
+Examples:
+- `The Matrix (1999).mkv`
+- `Inception (2010).mkv`
+- `The Shawshank Redemption (1994).mkv`
+
+### TV Series
+
+Format: `Show Name - S##E## - Episode Title.mkv`
+
+Examples:
+- `Breaking Bad - S01E01 - Pilot.mkv`
+- `The Legend of Korra - S01E01 - Welcome to Republic City.mkv`
+- `Game of Thrones - S03E09 - The Rains of Castamere.mkv`
+
+**Note:** Episode titles require a TVDB API key. Without it, files are named `Show Name - S##E##.mkv`.
 
 ## How It Works
 
-### Workflow
+RipSharp follows a streamlined workflow to automatically process optical discs:
 
-The application:
-
-1. **Scans disc** - Uses `makemkvcon` to identify all titles and their properties
-2. **Identifies content** - Finds the main feature (movies) or episodes (TV series)
-3. **Looks up metadata** - Queries OMDB then TMDB for official titles and years; queries TVDB for TV episode titles
-4. **Rips & encodes** - Extracts using MakeMKV at highest available quality; ripping and encoding happen in parallel for efficiency
-5. **Selects tracks** - Includes English audio and subtitles only
-6. **Renames & saves** - Moves to output directory with proper naming; auto-cleans temporary directory after successful completion
-
-```mermaid
-%%{init: {"theme": "base", "themeVariables": {"primaryColor": "#ffffff", "primaryTextColor": "#111111", "primaryBorderColor": "#111111", "secondaryColor": "#ffffff", "tertiaryColor": "#ffffff", "textColor": "#111111", "lineColor": "#111111", "edgeLabelBackground": "#ffffff", "noteBkgColor": "#ffffff", "noteTextColor": "#111111", "fontSize": "18px"}, "flowchart": {"curve": "linear"}}}%%
-graph TD
-   classDef default fill:#ffffff,stroke:#111111,color:#111111,stroke-width:2px;
-   linkStyle default stroke:#111111,stroke-width:2px;
-    A["Insert Disc"] --> B["Scan Disc<br/>makemkvcon info"]
-    B --> C{"Detect<br/>Content Type"}
-    C -->|Movie| D["Identify Main Feature<br/>45+ minutes"]
-    C -->|TV Series| E["Identify Episodes<br/>20-50 minutes each"]
-    D --> F["Query Metadata<br/>OMDB/TMDB"]
-    E --> G["Query Metadata<br/>OMDB/TMDB + TVDB"]
-    F --> H["Rip with MakeMKV<br/>Highest Quality"]
-    G --> H
-    H --> I["Select Tracks<br/>English Audio/Subtitles"]
-    I --> J["Generate Filename<br/>Title (Year) or<br/>Show - S##E## - Title"]
-    J --> K["Save to Output<br/>Directory"]
-    K --> L["Complete ✓"]
-```
-
-### File Naming
-
-**Movies:** `Title (Year).mkv`  
-Example: `The Matrix (1999).mkv`
-
-**TV Series:** `Show Name - S##E## - Episode Title.mkv`  
-Example: `Breaking Bad - S01E01 - Pilot.mkv`, `The Legend of Korra - S01E01 - Welcome to Republic City.mkv`
-
-**Note:** Episode titles are included when `TVDB_API_KEY` is set. Falls back to `S##E##` format without titles.
-
-### Track Selection
-
-- **Video:** Highest resolution stream (copied, not re-encoded)
-- **Audio:** All English stereo (2ch) and surround (5.1+) tracks
-- **Subtitles:** All English subtitle tracks
-
-## Metadata APIs
-
-RipSharp uses multiple metadata APIs to look up accurate titles, years, and episode information. While API keys are optional, they significantly improve the accuracy of file naming.
-
-### The Movie Database (TMDB)
-
-**Purpose:** Primary source for movie and TV series metadata (titles, years, series information)
-
-**Website:** https://www.themoviedb.org/
-
-**Getting an API Key:**
-1. Create a free account at https://www.themoviedb.org/signup
-2. Go to Settings → API: https://www.themoviedb.org/settings/api
-3. Request an API key (choose "Developer" option)
-4. Accept the terms and provide basic information about your use
-5. Copy your API Key (v3 auth)
-
-**Cost:** Free for personal, non-commercial use
-
-**Set in environment:**
-
-```bash
-export TMDB_API_KEY="your_api_key_here"
-```
-
-### Open Movie Database (OMDB)
-
-**Purpose:** Fallback metadata source for movies and TV series
-
-**Website:** http://www.omdbapi.com/
-
-**Getting an API Key:**
-1. Visit http://www.omdbapi.com/apikey.aspx
-2. Select a plan (Free tier: 1,000 requests/day)
-3. Enter your email address
-4. Verify your email and activate the key
-
-**Cost:** Free tier available (1,000 daily requests); paid tiers for higher volume
-
-**Set in environment:**
-
-```bash
-export OMDB_API_KEY="your_api_key_here"
-```
-
-### TheTVDB
-
-**Purpose:** TV episode titles for accurate episode naming
-
-**Website:** https://thetvdb.com/
-
-**Getting an API Key:**
-1. Create a free account at https://thetvdb.com/auth/register
-2. Log in and go to your API keys page: https://thetvdb.com/dashboard/account/apikeys
-3. Create a new API key (v4 API)
-4. Copy the API key
-
-**Cost:** Free for personal use
-
-**Set in environment:**
-
-```bash
-export TVDB_API_KEY="your_api_key_here"
-```
-
-### Metadata Lookup Behavior
-
-- **Movies:** Queries OMDB first, then TMDB as fallback
-- **TV Series:** Uses OMDB/TMDB for series name and year; queries TVDB for individual episode titles
-- **Fallback:** If no API keys are set or lookup fails, uses disc title or generic naming
-- **Episode Titles:** Without TVDB key, episodes are named `S##E##` without episode titles
+1. **Scan** — Uses MakeMKV to detect all titles on the disc
+2. **Detect** — Analyzes title durations to identify content type (movie vs TV series)
+3. **Lookup** — Queries metadata providers (TMDB, OMDB, TVDB) for titles and episode information
+4. **Rip** — Extracts titles using MakeMKV at highest quality
+5. **Encode** — Re-encodes with FFmpeg (H.264, AAC) with parallel processing for efficiency
+6. **Rename** — Generates organized filenames and moves to output directory
+7. **Cleanup** — Removes temporary files automatically
 
 ## Troubleshooting
 
@@ -319,79 +240,77 @@ export TVDB_API_KEY="your_api_key_here"
 Ensure all dependencies are installed and in PATH:
 
 ```bash
-which makemkvcon ffmpeg ffprobe
+which makemkvcon ffmpeg ffprobe dotnet
 ```
 
 ### Disc not detected
 
-1. Insert disc and wait for it to be recognized
+1. Insert disc and wait for it to be recognized by the system
 2. Check if readable: `makemkvcon info disc:0`
-3. Try alternate device: `--disc /dev/sr0` or `/dev/sr1`
+3. Try alternate device: `--disc disc:1` or specify device path
 
 ### Insufficient disk space
 
-- DVD: 4-8 GB
-- Blu-Ray: 15-35 GB
-- UHD 4K: 40-100 GB
+Space requirements by disc type:
+- DVD: 4–8 GB
+- Blu-ray: 15–35 GB
+- UHD 4K: 40–100 GB
 
 Ensure both `--temp` and `--output` directories have sufficient space.
 
 ### MakeMKV beta key required
 
-Visit: https://www.makemkv.com/forum/viewtopic.php?f=5&t=1053
+MakeMKV requires a license key. Get the latest beta key from: https://www.makemkv.com/forum/viewtopic.php?f=5&t=1053
 
 ### Permission denied
 
 Some systems require elevated permissions to access optical drives:
 
 ```bash
-sudo dotnet run --project src/RipSharp -- --output ~/Movies --mode movie
+sudo dotnet run --project src/RipSharp -- --output ~/Movies
 ```
-
-## Examples
-
-See [EXAMPLES.md](EXAMPLES.md) for additional examples including:
-
-```yaml
-metadata:
-  lookup_enabled: true
-omdb_api_key: "your_omdb_api_key"
-tmdb_api_key: "your_tmdb_api_key"
-tvdb_api_key: "your_tvdb_api_key"  # optional, issue #37 (in progress)
-```
-
-## Output Formats
-
-- **Container:** Matroska (MKV)
-- **Video:** Copied without re-encoding (preserves original codec and quality)
-- **Audio:** Copied without re-encoding (AC3, DTS, TrueHD, etc.)
-- **Subtitles:** Copied as-is (PGS, SRT, VobSub, etc.)
-
-## Performance
-
-Typical times (varies by drive speed and disc condition):
-
-| Type | Size | Time |
-|------|------|------|
-| DVD | 4-8 GB | 10-30 min |
-| Blu-Ray | 15-35 GB | 30-90 min |
-| UHD 4K | 40-100 GB | 60-180 min |
-
-## License
-
-Personal use only. Ensure you own the physical media and comply with applicable copyright laws.
-
-## Contributing
-
-Contributions welcome! Please submit issues or pull requests.
 
 ## Support
 
-- Check [Troubleshooting](#troubleshooting) above
-- Open an issue on [GitHub](https://github.com/mapitman/RipSharp/issues)
-- Visit [MakeMKV forums](https://www.makemkv.com/forum/)
+- Check [Troubleshooting](#troubleshooting) for common issues
+- Open an issue on GitHub: https://github.com/mapitman/ripsharp/issues
+- See examples in [EXAMPLES.md](EXAMPLES.md)
+- MakeMKV forums can help with drive or ripping issues: https://www.makemkv.com/forum/
+
+## Performance
+
+Typical ripping and encoding times vary by disc type, drive speed, and system performance.
+
+| Disc Type | Size      | Approximate Time |
+|:----------|:----------|:-----------------|
+| DVD       | 4–8 GB    | 10–30 minutes    |
+| Blu-ray   | 15–35 GB  | 30–90 minutes    |
+| UHD 4K    | 40–100 GB | 60–180 minutes   |
+
+**Factors affecting performance:**
+- Optical drive read speed
+- CPU encoding performance
+- Disc condition and read errors
+- Parallel processing enabled (default)
+
+**Note:** Times include both ripping and encoding. Use `--sequential` to disable parallel processing if needed.
+
+## Contributing
+
+Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+## License
+
+MIT License - see [LICENSE](LICENSE) for details.
+
+**Note:** Ensure you own the physical media and comply with applicable copyright laws when ripping discs.
 
 ## Acknowledgments
 
-- **MakeMKV** - Disc ripping engine
-- **FFmpeg** - Media processing
+RipSharp is built on top of these excellent tools:
+
+- **[MakeMKV](https://www.makemkv.com/)** — Disc ripping and extraction engine
+- **[FFmpeg](https://ffmpeg.org/)** — Media encoding and processing
+- **[TMDB](https://www.themoviedb.org/)** — Movie and TV series metadata
+- **[OMDB](https://www.omdbapi.com/)** — Additional movie database
+- **[TVDB](https://thetvdb.com/)** — TV episode information
