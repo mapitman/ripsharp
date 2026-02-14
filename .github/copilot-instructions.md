@@ -12,6 +12,7 @@
 - Write XML documentation comments for public APIs.
 - Follow SOLID principles and best practices.
 - Use meaningful commit messages that describe the changes made.
+- Use dependency injection where appropriate to improve testability and maintainability.
 
 ## Changes and Validation
 
@@ -20,3 +21,4 @@
 - Run relevant tests when asked or after non-trivial changes.
 - Run `dotnet format` before submitting changes.
 - Follow `.editorconfig` settings when adding new code or modifying existing code.
+- Run commands in the main terminal so output is visible to the user.
