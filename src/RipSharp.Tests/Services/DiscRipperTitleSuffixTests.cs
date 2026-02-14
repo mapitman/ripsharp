@@ -1,17 +1,7 @@
 using System.Collections;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using System.Reflection;
-using System.Threading.Tasks;
 
-using AwesomeAssertions;
-
-using NSubstitute;
-
-using Xunit;
-
-namespace BugZapperLabs.RipSharp.Tests.Services;
+namespace RipSharp.Tests.Services;
 
 public class DiscRipperTitleSuffixTests
 {

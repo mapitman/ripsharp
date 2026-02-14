@@ -1,5 +1,3 @@
-using Microsoft.Extensions.Configuration;
-
 namespace BugZapperLabs.RipSharp.Core;
 
 public class AppConfig

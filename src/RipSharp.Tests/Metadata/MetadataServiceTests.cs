@@ -1,14 +1,4 @@
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
-
-using AwesomeAssertions;
-
-using NSubstitute;
-
-using Xunit;
-
-namespace BugZapperLabs.RipSharp.Tests.Metadata;
+namespace RipSharp.Tests.Metadata;
 
 public class MetadataServiceTests : IDisposable
 {

@@ -1,8 +1,4 @@
-using System.Collections.Generic;
-
-using Xunit;
-
-namespace BugZapperLabs.RipSharp.Tests.Services;
+namespace RipSharp.Tests.Services;
 
 public class DiscTypeDetectorTests
 {

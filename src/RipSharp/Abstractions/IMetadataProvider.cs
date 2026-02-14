@@ -1,5 +1,3 @@
-using System.Threading.Tasks;
-
 namespace BugZapperLabs.RipSharp.Abstractions;
 
 public interface IMetadataProvider
