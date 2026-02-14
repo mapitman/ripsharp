@@ -1,6 +1,6 @@
 using System.Threading.Tasks;
 
-namespace RipSharp.Abstractions;
+namespace BugZapperLabs.RipSharp.Abstractions;
 
 public interface ITvEpisodeTitleProvider
 {

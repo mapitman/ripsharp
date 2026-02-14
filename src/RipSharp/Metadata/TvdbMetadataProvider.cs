@@ -6,7 +6,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 
-namespace RipSharp.Metadata;
+namespace BugZapperLabs.RipSharp.Metadata;
 
 /// <summary>
 /// TVDB metadata provider using raw REST calls. Currently scaffolding the flow; real

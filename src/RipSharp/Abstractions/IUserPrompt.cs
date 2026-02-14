@@ -1,4 +1,4 @@
-namespace RipSharp.Abstractions;
+namespace BugZapperLabs.RipSharp.Abstractions;
 
 /// <summary>
 /// Interface for prompting users for input during interactive operations.

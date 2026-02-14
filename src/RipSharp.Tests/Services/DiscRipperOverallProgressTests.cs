@@ -3,12 +3,9 @@ using System.Reflection;
 
 using AwesomeAssertions;
 
-using RipSharp.Abstractions;
-using RipSharp.Services;
-
 using Xunit;
 
-namespace RipSharp.Tests.Services;
+namespace BugZapperLabs.RipSharp.Tests.Services;
 
 public class DiscRipperOverallProgressTests
 {

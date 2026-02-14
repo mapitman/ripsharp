@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Configuration;
 
-namespace RipSharp.Core;
+namespace BugZapperLabs.RipSharp.Core;
 
 public class AppConfig
 {

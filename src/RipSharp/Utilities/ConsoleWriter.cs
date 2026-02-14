@@ -1,6 +1,6 @@
 using Spectre.Console;
 
-namespace RipSharp.Utilities;
+namespace BugZapperLabs.RipSharp.Utilities;
 
 /// <summary>
 /// Spectre.Console implementation for writing styled messages to the console.

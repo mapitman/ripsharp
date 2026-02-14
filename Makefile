@@ -1,4 +1,4 @@
-.PHONY: all build test format clean restore help
+.PHONY: all build test format clean restore pack help
 
 # Default target: build and test the solution
 all: build test
@@ -11,6 +11,7 @@ help:
 	@echo "  make build     - Build the solution"
 	@echo "  make format    - Run dotnet format"
 	@echo "  make test      - Run tests"
+	@echo "  make pack      - Build NuGet package (Release)"
 	@echo "  make clean     - Clean build outputs"
 
 # Restore NuGet packages
@@ -28,6 +29,10 @@ format:
 # Run tests
 test: build
 	dotnet test RipSharp.sln
+
+# Build NuGet package (Release)
+pack: build
+	dotnet pack -c Release src/RipSharp
 
 # Clean build outputs
 clean:

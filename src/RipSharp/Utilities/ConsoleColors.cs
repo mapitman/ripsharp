@@ -1,6 +1,6 @@
 using Spectre.Console;
 
-namespace RipSharp.Utilities;
+namespace BugZapperLabs.RipSharp.Utilities;
 
 /// <summary>
 /// Consistent color palette for Spectre.Console markup throughout the application.

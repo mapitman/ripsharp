@@ -1,6 +1,6 @@
 using Spectre.Console;
 
-namespace RipSharp.Utilities;
+namespace BugZapperLabs.RipSharp.Utilities;
 
 /// <summary>
 /// Manages terminal cursor visibility, ensuring it's restored on application exit.

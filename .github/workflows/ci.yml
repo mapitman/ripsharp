@@ -3,6 +3,7 @@ name: CI
 on:
   push:
     branches: ["main"]
+    tags: ["v*"]
   pull_request:
 
 jobs:
@@ -25,3 +26,55 @@ jobs:
 
       - name: Test
         run: dotnet test --no-build --verbosity normal RipSharp.sln
+
+  pack-tool:
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Get version from tag
+        id: version
+        run: echo "value=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+
+      - name: Validate tag format
+        run: |
+          if [[ ! "${{ steps.version.outputs.value }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Tag must match vMAJOR.MINOR.PATCH (e.g., v1.2.3)."
+            exit 1
+          fi
+
+      - name: Restore
+        run: dotnet restore RipSharp.sln
+
+      - name: Build
+        run: dotnet build --no-restore -c Release RipSharp.sln
+
+      - name: Pack
+        run: dotnet pack --no-build -c Release src/RipSharp /p:Version=${{ steps.version.outputs.value }}
+
+      - name: Get OIDC token
+        id: oidc
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const token = await core.getIDToken('https://int.nugettest.org');
+            core.setOutput('token', token);
+
+      - name: Publish to NuGet
+        run: dotnet nuget push src/RipSharp/bin/Release/*.nupkg --api-key "${{ steps.oidc.outputs.token }}" --source https://int.nugettest.org/v3/index.json
+
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: ripsharp-nupkg
+          path: src/RipSharp/bin/Release/*.nupkg

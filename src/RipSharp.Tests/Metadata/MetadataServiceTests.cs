@@ -6,11 +6,9 @@ using AwesomeAssertions;
 
 using NSubstitute;
 
-using RipSharp;
-
 using Xunit;
 
-namespace RipSharp.Tests.Metadata;
+namespace BugZapperLabs.RipSharp.Tests.Metadata;
 
 public class MetadataServiceTests : IDisposable
 {

@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace RipSharp.Metadata;
+namespace BugZapperLabs.RipSharp.Metadata;
 
 public static class TitleVariationGenerator
 {

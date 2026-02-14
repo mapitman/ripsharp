@@ -1,7 +1,7 @@
 using System;
 using System.IO;
 
-namespace RipSharp.Utilities;
+namespace BugZapperLabs.RipSharp.Utilities;
 
 public static class FileNaming
 {

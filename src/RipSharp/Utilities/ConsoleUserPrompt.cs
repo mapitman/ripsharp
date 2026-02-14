@@ -1,6 +1,6 @@
 using Spectre.Console;
 
-namespace RipSharp.Utilities;
+namespace BugZapperLabs.RipSharp.Utilities;
 
 /// <summary>
 /// Prompts users for input using Spectre.Console for rich terminal interactions.

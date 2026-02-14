@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace RipSharp.Services;
+namespace BugZapperLabs.RipSharp.Services;
 
 /// <summary>
 /// Detects the type of content on a disc (movie vs TV series) based on structural analysis.

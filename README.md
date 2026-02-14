@@ -116,6 +116,35 @@
    dotnet run --project src/RipSharp -- --output ~/Movies --disc "file:/path/to/movie.iso"
    ```
 
+## Install as a Global Tool
+
+Install from NuGet:
+
+```bash
+dotnet tool install -g BugZapperLabs.RipSharp
+```
+
+Run:
+
+```bash
+ripsharp --output ~/Movies
+```
+
+Check the version:
+
+```bash
+ripsharp --version
+```
+
+### Pack and install locally
+
+```bash
+dotnet pack -c Release src/RipSharp /p:Version=0.1.0
+dotnet tool install -g BugZapperLabs.RipSharp --add-source src/RipSharp/bin/Release
+```
+
+If you version from git tags in CI, pass the tag version as `/p:Version=1.2.3` during `dotnet pack`.
+
 ## Options
 
 ### Required
@@ -139,6 +168,7 @@
 | `--sequential`           | Disable parallel processing (rip all, then encode all)                                                |
 | `--debug`                | Enable debug logging                                                                                  |
 | `-h, --help`             | Show help message                                                                                     |
+| `-v, --version`          | Show application version                                                                              |
 
 ### Environment Variables
 

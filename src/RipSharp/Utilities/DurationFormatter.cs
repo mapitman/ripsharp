@@ -1,4 +1,4 @@
-namespace RipSharp.Utilities;
+namespace BugZapperLabs.RipSharp.Utilities;
 
 public static class DurationFormatter
 {
