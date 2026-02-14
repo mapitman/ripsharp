@@ -138,8 +138,9 @@ public class DiscRipper : IDiscRipper
             else
             {
                 var ordinal = idx + 1;
-                versionSuffix = $" - title{ordinal:D2}";
-                var safeVersionSuffix = FileNaming.SanitizeFileName(versionSuffix);
+                var includeSuffix = titleIds.Count > 1;
+                versionSuffix = includeSuffix ? $" - title{ordinal:D2}" : null;
+                var safeVersionSuffix = string.IsNullOrWhiteSpace(versionSuffix) ? "" : FileNaming.SanitizeFileName(versionSuffix);
                 var yearPart = metadata.Year.HasValue ? $" ({metadata.Year.Value})" : "";
                 var safeTitle = !string.IsNullOrWhiteSpace(titleName) ? FileNaming.SanitizeFileName(titleName!) : safeSeriesTitle;
                 finalFileName = $"{safeTitle}{yearPart}{safeVersionSuffix}.mkv";
@@ -758,8 +759,9 @@ public class DiscRipper : IDiscRipper
             {
                 var ordinal = titleIds.IndexOf(titleId) + 1;
                 var safeTitle = !string.IsNullOrWhiteSpace(titleName) ? FileNaming.SanitizeFileName(titleName!) : $"movie_{ordinal}";
-                versionSuffix = $" - title{ordinal:D2}";
-                var safeVersionSuffix = FileNaming.SanitizeFileName(versionSuffix);
+                var includeSuffix = titleIds.Count > 1;
+                versionSuffix = includeSuffix ? $" - title{ordinal:D2}" : null;
+                var safeVersionSuffix = string.IsNullOrWhiteSpace(versionSuffix) ? "" : FileNaming.SanitizeFileName(versionSuffix);
                 outputName = Path.Combine(options.Output, $"{safeTitle}{safeVersionSuffix}.mkv");
             }
             if (File.Exists(outputName)) File.Delete(outputName);
