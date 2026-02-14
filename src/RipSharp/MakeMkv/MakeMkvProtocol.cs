@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace RipSharp.MakeMkv;
+namespace BugZapperLabs.RipSharp.MakeMkv;
 
 public static class MakeMkvProtocol
 {

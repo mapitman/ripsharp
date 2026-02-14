@@ -7,12 +7,10 @@ using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 
-using RipSharp.Abstractions;
-
 using Spectre.Console;
 
 
-namespace RipSharp.Services;
+namespace BugZapperLabs.RipSharp.Services;
 
 // Job records for channel communication
 public record RipJob(

@@ -1,4 +1,4 @@
-namespace RipSharp.Abstractions;
+namespace BugZapperLabs.RipSharp.Abstractions;
 
 /// <summary>
 /// Abstraction for displaying progress bars and animated progress indicators.

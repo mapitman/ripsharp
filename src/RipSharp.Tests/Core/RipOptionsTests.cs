@@ -3,11 +3,11 @@ using System.IO;
 
 using AwesomeAssertions;
 
-using RipSharp;
+using BugZapperLabs.RipSharp;
 
 using Xunit;
 
-namespace RipSharp.Tests.Core;
+namespace BugZapperLabs.RipSharp.Tests.Core;
 
 public class RipOptionsTests
 {
@@ -49,6 +49,39 @@ public class RipOptionsTests
         var result = RipOptions.ParseArgs(args);
 
         result.ShowHelp.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ParseArgs_WithVersionShortFlag_SetsShowVersionTrue()
+    {
+        var args = new[] { "-v" };
+
+        var result = RipOptions.ParseArgs(args);
+
+        result.ShowVersion.Should().BeTrue();
+        result.ShowHelp.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ParseArgs_WithVersionLongFlag_SetsShowVersionTrue()
+    {
+        var args = new[] { "--version" };
+
+        var result = RipOptions.ParseArgs(args);
+
+        result.ShowVersion.Should().BeTrue();
+        result.ShowHelp.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ParseArgs_WithVersionAmongOtherArgs_SetsShowVersionTrue()
+    {
+        var args = new[] { "--output", "/tmp", "--version" };
+
+        var result = RipOptions.ParseArgs(args);
+
+        result.ShowVersion.Should().BeTrue();
+        result.ShowHelp.Should().BeFalse();
     }
 
     [Fact]

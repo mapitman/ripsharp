@@ -1,4 +1,4 @@
-namespace RipSharp.Utilities;
+namespace BugZapperLabs.RipSharp.Tests.Utilities;
 
 public class CursorManagerTests
 {

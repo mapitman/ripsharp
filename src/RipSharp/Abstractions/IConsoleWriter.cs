@@ -1,4 +1,4 @@
-namespace RipSharp.Abstractions;
+namespace BugZapperLabs.RipSharp.Abstractions;
 
 /// <summary>
 /// Abstraction for writing styled output messages to the console.

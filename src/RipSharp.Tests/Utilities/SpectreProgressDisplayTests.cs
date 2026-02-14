@@ -3,11 +3,9 @@ using System.Reflection;
 
 using AwesomeAssertions;
 
-using RipSharp.Utilities;
-
 using Xunit;
 
-namespace RipSharp.Tests.Utilities;
+namespace BugZapperLabs.RipSharp.Tests.Utilities;
 
 public class SpectreProgressDisplayTests
 {

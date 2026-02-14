@@ -3,7 +3,7 @@ using System.Net.Http;
 using System.Text.Json;
 using System.Threading.Tasks;
 
-namespace RipSharp.Metadata;
+namespace BugZapperLabs.RipSharp.Metadata;
 
 public class TmdbMetadataProvider : IMetadataProvider
 {

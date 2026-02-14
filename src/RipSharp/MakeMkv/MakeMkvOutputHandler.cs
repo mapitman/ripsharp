@@ -2,7 +2,7 @@ using System;
 using System.IO;
 using System.Text.RegularExpressions;
 
-namespace RipSharp.MakeMkv;
+namespace BugZapperLabs.RipSharp.MakeMkv;
 
 public class MakeMkvOutputHandler
 {

@@ -1,10 +1,8 @@
 using System.Collections.Generic;
 
-using RipSharp;
-
 using Xunit;
 
-namespace RipSharp.Tests.Metadata;
+namespace BugZapperLabs.RipSharp.Tests.Metadata;
 
 public class TitleVariationGeneratorEdgeCasesTests
 {

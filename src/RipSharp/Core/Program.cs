@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Reflection;
 using System.Threading.Tasks;
 
 using Microsoft.Extensions.Configuration;
@@ -14,7 +15,7 @@ using NetEscapades.Configuration.Yaml;
 using Spectre.Console;
 
 
-namespace RipSharp.Core;
+namespace BugZapperLabs.RipSharp.Core;
 
 public class Program
 {
@@ -44,6 +45,20 @@ public class Program
 
     private static async Task<int> RunAsync(string[] args, CursorManager cursorManager)
     {
+        var options = RipOptions.ParseArgs(args);
+
+        if (options.ShowHelp)
+        {
+            RipOptions.DisplayHelp(new ConsoleWriter());
+            return 0;
+        }
+
+        if (options.ShowVersion)
+        {
+            Console.WriteLine($"ripsharp {GetVersion()}");
+            return 0;
+        }
+
         using var host = Host.CreateDefaultBuilder(args)
             .ConfigureAppConfiguration((ctx, cfg) =>
             {
@@ -97,14 +112,6 @@ public class Program
             })
             .Build();
 
-        var options = RipOptions.ParseArgs(args);
-
-        if (options.ShowHelp)
-        {
-            RipOptions.DisplayHelp(new ConsoleWriter());
-            return 0;
-        }
-
         var ripper = host.Services.GetRequiredService<IDiscRipper>();
         var writer = host.Services.GetRequiredService<IConsoleWriter>();
 
@@ -133,5 +140,17 @@ public class Program
             writer.Error("Failed to process disc");
             return 1;
         }
+    }
+
+    private static string GetVersion()
+    {
+        var assembly = Assembly.GetExecutingAssembly();
+        var infoVersion = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+        if (!string.IsNullOrWhiteSpace(infoVersion))
+        {
+            return infoVersion;
+        }
+
+        return assembly.GetName().Version?.ToString() ?? "unknown";
     }
 }

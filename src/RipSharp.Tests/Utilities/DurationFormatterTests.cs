@@ -1,10 +1,8 @@
 using AwesomeAssertions;
 
-using RipSharp;
-
 using Xunit;
 
-namespace RipSharp.Tests.Utilities;
+namespace BugZapperLabs.RipSharp.Tests.Utilities;
 
 public class DurationFormatterTests
 {

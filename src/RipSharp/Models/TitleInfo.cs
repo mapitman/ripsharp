@@ -1,4 +1,4 @@
-namespace RipSharp.Models;
+namespace BugZapperLabs.RipSharp.Models;
 
 public class TitleInfo
 {

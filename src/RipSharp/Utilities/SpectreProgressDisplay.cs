@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 using Spectre.Console;
 using Spectre.Console.Rendering;
 
-namespace RipSharp.Utilities;
+namespace BugZapperLabs.RipSharp.Utilities;
 
 /// <summary>
 /// Spectre.Console implementation of progress display with rich terminal animations.

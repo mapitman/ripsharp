@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
-namespace RipSharp.Models;
+namespace BugZapperLabs.RipSharp.Models;
 
 public class ContentMetadata
 {

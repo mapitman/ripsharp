@@ -1,4 +1,4 @@
-namespace RipSharp.Abstractions;
+namespace BugZapperLabs.RipSharp.Abstractions;
 
 public interface IDiscScanner
 {

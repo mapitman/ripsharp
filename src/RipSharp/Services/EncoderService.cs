@@ -4,7 +4,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 
 
-namespace RipSharp.Services;
+namespace BugZapperLabs.RipSharp.Services;
 
 public class EncoderService : IEncoderService
 {

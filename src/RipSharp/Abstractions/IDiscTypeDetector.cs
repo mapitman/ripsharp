@@ -1,4 +1,4 @@
-namespace RipSharp.Abstractions;
+namespace BugZapperLabs.RipSharp.Abstractions;
 
 /// <summary>
 /// Interface for detecting the type of content on a disc (movie vs TV series).
