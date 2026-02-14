@@ -1,18 +1,8 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Net.Http;
 using System.Reflection;
-using System.Threading.Tasks;
 
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-
-using NetEscapades.Configuration.Yaml;
-
-using Spectre.Console;
 
 
 namespace BugZapperLabs.RipSharp.Core;
@@ -57,6 +47,45 @@ public class Program
         {
             Console.WriteLine($"ripsharp {GetVersion()}");
             return 0;
+        }
+
+        var missingTools = PrerequisiteChecker.GetMissingTools(
+            Environment.GetEnvironmentVariable("PATH"),
+            OperatingSystem.IsWindows(),
+            File.Exists);
+
+        if (missingTools.Count > 0)
+        {
+            var prereqWriter = new ConsoleWriter();
+            prereqWriter.Error("Missing required prerequisites:");
+            foreach (var tool in missingTools)
+            {
+                prereqWriter.Error($"  - {tool}");
+            }
+
+            prereqWriter.Plain("");
+            prereqWriter.Info("Install instructions:");
+            if (OperatingSystem.IsWindows())
+            {
+                prereqWriter.Plain("  - winget install --id Gyan.FFmpeg");
+                prereqWriter.Plain("  - Download MakeMKV: https://www.makemkv.com/");
+            }
+            else if (OperatingSystem.IsMacOS())
+            {
+                prereqWriter.Plain("  - brew install ffmpeg");
+                prereqWriter.Plain("  - Download MakeMKV: https://www.makemkv.com/");
+            }
+            else
+            {
+                prereqWriter.Plain("  - Ubuntu/Debian: sudo apt install ffmpeg");
+                prereqWriter.Plain("  - Fedora: sudo dnf install ffmpeg");
+                prereqWriter.Plain("  - Arch: sudo pacman -S ffmpeg");
+                prereqWriter.Plain("  - openSUSE: sudo zypper install ffmpeg");
+                prereqWriter.Plain("  - Alpine: sudo apk add ffmpeg");
+                prereqWriter.Plain("  - MakeMKV: https://www.makemkv.com/");
+            }
+
+            return 2;
         }
 
         using var host = Host.CreateDefaultBuilder(args)

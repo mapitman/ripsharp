@@ -1,11 +1,6 @@
-using System;
 using System.Reflection;
 
-using AwesomeAssertions;
-
-using Xunit;
-
-namespace BugZapperLabs.RipSharp.Tests.Services;
+namespace RipSharp.Tests.Services;
 
 public class DiscRipperRipSummaryTests
 {

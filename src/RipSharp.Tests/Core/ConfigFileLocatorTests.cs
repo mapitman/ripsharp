@@ -1,11 +1,4 @@
-using System;
-using System.IO;
-
-using AwesomeAssertions;
-
-using Xunit;
-
-namespace BugZapperLabs.RipSharp.Tests.Core;
+namespace RipSharp.Tests.Core;
 
 public class ConfigFileLocatorTests
 {

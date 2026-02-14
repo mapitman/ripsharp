@@ -1,13 +1,4 @@
-using System;
-using System.IO;
-
-using AwesomeAssertions;
-
-using BugZapperLabs.RipSharp;
-
-using Xunit;
-
-namespace BugZapperLabs.RipSharp.Tests.Core;
+namespace RipSharp.Tests.Core;
 
 public class RipOptionsTests
 {

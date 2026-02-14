@@ -1,8 +1,4 @@
-using AwesomeAssertions;
-
-using Xunit;
-
-namespace BugZapperLabs.RipSharp.Tests.MakeMkv;
+namespace RipSharp.Tests.MakeMkv;
 
 public class MakeMkvProtocolTests
 {

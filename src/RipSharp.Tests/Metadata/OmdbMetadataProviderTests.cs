@@ -1,16 +1,6 @@
-using System;
 using System.Net;
-using System.Net.Http;
-using System.Threading;
-using System.Threading.Tasks;
 
-using AwesomeAssertions;
-
-using NSubstitute;
-
-using Xunit;
-
-namespace BugZapperLabs.RipSharp.Tests.Metadata;
+namespace RipSharp.Tests.Metadata;
 
 public class OmdbMetadataProviderTests
 {
