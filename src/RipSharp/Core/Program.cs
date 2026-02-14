@@ -128,11 +128,6 @@ public class Program
 
         if (files.Count > 0)
         {
-            writer.Success("Success! Files created:");
-            foreach (var f in files)
-            {
-                writer.Plain(f);
-            }
             return 0;
         }
         else
