@@ -92,8 +92,9 @@ public class DiscRipperTitleSuffixTests
         var userPrompt = Substitute.For<IUserPrompt>();
         var episodeTitles = Substitute.For<ITvEpisodeTitleProvider>();
         var progressDisplay = Substitute.For<IProgressDisplay>();
+        var theme = ThemeProvider.CreateDefault();
 
-        return new DiscRipper(scanner, encoder, metadataService, makeMkv, notifier, userPrompt, episodeTitles, progressDisplay);
+        return new DiscRipper(scanner, encoder, metadataService, makeMkv, notifier, userPrompt, episodeTitles, progressDisplay, theme);
     }
 
     private static async Task<List<object>> InvokeBuildTitlePlansAsync(

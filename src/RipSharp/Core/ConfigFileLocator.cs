@@ -24,14 +24,15 @@ internal static class ConfigFileLocator
                                                          "  default_path: \"disc:0\"\n" +
                                                          "  default_temp_dir: \"/tmp/makemkv\"\n\n" +
                                                          "output:\n" +
-                                                         "  movies_dir: \"~/Movies\"\n" +
-                                                         "  tv_dir: \"~/TV\"\n\n" +
+                                                         "  movies_dir: \"~/Videos/Movies\"\n" +
+                                                         "  tv_dir: \"~/Videos/TV\"\n\n" +
                                                          "encoding:\n" +
                                                          "  include_english_subtitles: true\n" +
                                                          "  include_stereo_audio: true\n" +
                                                          "  include_surround_audio: true\n\n" +
                                                          "metadata:\n" +
-                                                         "  lookup_enabled: true\n";
+                                                         "  lookup_enabled: true\n\n" +
+                                                         "theme: \"catppuccin mocha\"\n";
 
     internal static ConfigSearchContext CreateContext()
     {

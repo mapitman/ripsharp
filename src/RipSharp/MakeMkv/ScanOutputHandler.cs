@@ -5,6 +5,7 @@ namespace BugZapperLabs.RipSharp.MakeMkv;
 public class ScanOutputHandler
 {
     private readonly IConsoleWriter _notifier;
+    private readonly IThemeProvider _theme;
     private readonly List<TitleInfo> _titles;
     private string? _discName;
     private string? _discType;
@@ -14,9 +15,10 @@ public class ScanOutputHandler
     private int _titleAddedCount;
     private readonly HashSet<string> _printedTitles = new();
 
-    public ScanOutputHandler(IConsoleWriter notifier, List<TitleInfo> titles)
+    public ScanOutputHandler(IConsoleWriter notifier, IThemeProvider theme, List<TitleInfo> titles)
     {
         _notifier = notifier;
+        _theme = theme;
         _titles = titles;
     }
 
@@ -37,11 +39,11 @@ public class ScanOutputHandler
     {
         if (line.StartsWith("MSG:") && line.Contains("insert disc"))
         {
-            _notifier.Warning("💿 Insert a disc into the drive...");
+            _notifier.Warning($"{_theme.Emojis.InsertDisc} Insert a disc into the drive...");
         }
         else if (line.StartsWith("DRV:0,") && !line.Contains(",256,") && !_discDetectedPrinted)
         {
-            _notifier.Success("📀 Disc detected in drive...");
+            _notifier.Success($"{_theme.Emojis.DiscDetected} Disc detected in drive...");
             _discDetectedPrinted = true;
         }
         else if (line.StartsWith("MSG:1005,"))
@@ -62,7 +64,7 @@ public class ScanOutputHandler
         }
         else if (line.StartsWith("MSG:") && (line.Contains("Scanning") || line.Contains("scanning")) && !_scanningStarted)
         {
-            _notifier.Info("🔍 Scanning disc structure...");
+            _notifier.Info($"{_theme.Emojis.Scan} Scanning disc structure...");
             _scanningStarted = true;
         }
         else if (line.StartsWith("MSG:3307,"))
@@ -72,7 +74,7 @@ public class ScanOutputHandler
             var titleMatch = Regex.Match(line, @"title #(\d+)");
             if (fileMatch.Success && titleMatch.Success)
             {
-                _notifier.Success($"  ✓ Added title #{titleMatch.Groups[1].Value}: {fileMatch.Groups[1].Value}");
+                _notifier.Success($"  {_theme.Emojis.Success} Added title #{titleMatch.Groups[1].Value}: {fileMatch.Groups[1].Value}");
             }
         }
         else if (line.StartsWith("MSG:3309,"))
@@ -96,11 +98,11 @@ public class ScanOutputHandler
             var message = MakeMkvProtocol.ExtractQuoted(line);
             if (!string.IsNullOrWhiteSpace(message))
             {
-                _notifier.Error($"❌ {message}");
+                _notifier.Error($"{_theme.Emojis.Error} {message}");
             }
             else
             {
-                _notifier.Error($"❌ {line}");
+                _notifier.Error($"{_theme.Emojis.Error} {line}");
             }
         }
         else if (line.StartsWith("CINFO:1,"))
@@ -108,7 +110,7 @@ public class ScanOutputHandler
             var dtype = MakeMkvProtocol.ExtractQuoted(line);
             if (!string.IsNullOrWhiteSpace(dtype))
             {
-                _notifier.Accent($"💽 Disc type: {dtype}");
+                _notifier.Accent($"{_theme.Emojis.DiscType} Disc type: {dtype}");
             }
         }
         else if (line.StartsWith("TINFO:"))
@@ -119,7 +121,7 @@ public class ScanOutputHandler
                 var tname = MakeMkvProtocol.ExtractQuoted(line);
                 if (!string.IsNullOrWhiteSpace(tname) && _printedTitles.Add(tname!))
                 {
-                    _notifier.Highlight($"🎞️ Title found: {tname}");
+                    _notifier.Highlight($"{_theme.Emojis.TitleFound} Title found: {tname}");
                 }
             }
         }
