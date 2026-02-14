@@ -3,8 +3,8 @@ disc:
   default_temp_dir: "/tmp/makemkv"
 
 output:
-  movies_dir: "~/Movies"
-  tv_dir: "~/TV"
+  movies_dir: "~/Videos/Movies"
+  tv_dir: "~/Videos/TV"
 
 encoding:
   include_english_subtitles: true

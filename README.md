@@ -178,6 +178,34 @@ If you version from git tags in CI, pass the tag version as `/p:Version=1.2.3` d
 | `OMDB_API_KEY`  | OMDB API key for metadata lookup (optional)    |
 | `TVDB_API_KEY`  | TVDB API key for TV episode titles (optional)  |
 
+## Configuration File
+
+RipSharp loads configuration from the first file it finds in these locations:
+
+Linux:
+
+1. `$XDG_CONFIG_HOME/ripsharp/config.yaml`
+2. `$HOME/.config/ripsharp/config.yaml`
+3. `$HOME/.ripsharp.yaml`
+4. `./ripsharp.yaml`
+5. `./appsettings.yaml`
+
+Windows:
+
+1. `%APPDATA%/ripsharp/config.yaml`
+2. `%USERPROFILE%/.ripsharp.yaml`
+3. `./ripsharp.yaml`
+4. `./appsettings.yaml`
+
+macOS:
+
+1. `$HOME/.config/ripsharp/config.yaml`
+2. `$HOME/.ripsharp.yaml`
+3. `./ripsharp.yaml`
+4. `./appsettings.yaml`
+
+If no config file exists, RipSharp creates one in the first personal location above (for example, `$XDG_CONFIG_HOME/ripsharp/config.yaml` on Linux).
+
 ## Building
 
 ```bash

@@ -63,7 +63,19 @@ public class Program
             .ConfigureAppConfiguration((ctx, cfg) =>
             {
                 cfg.Sources.Clear();
-                cfg.AddYamlFile("appsettings.yaml", optional: true, reloadOnChange: true);
+                var configContext = ConfigFileLocator.CreateContext();
+                var configPath = ConfigFileLocator.ResolveConfigPath(
+                    configContext,
+                    ctx.HostingEnvironment.IsDevelopment(),
+                    File.Exists,
+                    File.WriteAllText,
+                    path => Directory.CreateDirectory(path));
+
+                if (!string.IsNullOrWhiteSpace(configPath))
+                {
+                    cfg.AddYamlFile(configPath, optional: false, reloadOnChange: true);
+                }
+
                 cfg.AddEnvironmentVariables();
             })
             .ConfigureServices((ctx, services) =>
