@@ -24,7 +24,7 @@ public class MetadataServiceTests : IDisposable
         Environment.SetEnvironmentVariable("TMDB_API_KEY", null);
         var notifier = Substitute.For<IConsoleWriter>();
         var providers = new List<IMetadataProvider>();
-        var svc = new MetadataService(providers, notifier);
+        var svc = new MetadataService(providers, notifier, ThemeProvider.CreateDefault());
 
         var md = await svc.LookupAsync("SIMPSONS_WS", isTv: false, year: null);
 
@@ -46,7 +46,7 @@ public class MetadataServiceTests : IDisposable
         provider2.Name.Returns("Provider2");
 
         var providers = new List<IMetadataProvider> { provider1, provider2 };
-        var svc = new MetadataService(providers, notifier);
+        var svc = new MetadataService(providers, notifier, ThemeProvider.CreateDefault());
 
         var result = await svc.LookupAsync("test", isTv: false, year: null);
 
@@ -70,7 +70,7 @@ public class MetadataServiceTests : IDisposable
         provider2.LookupAsync("test", false, null).Returns(new ContentMetadata { Title = "Test Movie", Year = 2021, Type = "movie" });
 
         var providers = new List<IMetadataProvider> { provider1, provider2 };
-        var svc = new MetadataService(providers, notifier);
+        var svc = new MetadataService(providers, notifier, ThemeProvider.CreateDefault());
 
         var result = await svc.LookupAsync("test", isTv: false, year: null);
 
@@ -91,7 +91,7 @@ public class MetadataServiceTests : IDisposable
         provider.LookupAsync("MOVIE_TITLE", Arg.Any<bool>(), Arg.Any<int?>()).Returns(new ContentMetadata { Title = "Movie Title", Year = 2023, Type = "movie" });
 
         var providers = new List<IMetadataProvider> { provider };
-        var svc = new MetadataService(providers, notifier);
+        var svc = new MetadataService(providers, notifier, ThemeProvider.CreateDefault());
 
         var result = await svc.LookupAsync("MOVIE_TITLE_2023", isTv: false, year: null);
 
@@ -112,7 +112,7 @@ public class MetadataServiceTests : IDisposable
         provider.LookupAsync("SIMPSONS", Arg.Any<bool>(), Arg.Any<int?>()).Returns(new ContentMetadata { Title = "The Simpsons", Year = 1989, Type = "tv" });
 
         var providers = new List<IMetadataProvider> { provider };
-        var svc = new MetadataService(providers, notifier);
+        var svc = new MetadataService(providers, notifier, ThemeProvider.CreateDefault());
 
         await svc.LookupAsync("SIMPSONS_WS", isTv: true, year: null);
 
@@ -131,7 +131,7 @@ public class MetadataServiceTests : IDisposable
         provider.LookupAsync("Test Movie", Arg.Any<bool>(), Arg.Any<int?>()).Returns(new ContentMetadata { Title = "Test Movie", Year = 2020, Type = "movie" });
 
         var providers = new List<IMetadataProvider> { provider };
-        var svc = new MetadataService(providers, notifier);
+        var svc = new MetadataService(providers, notifier, ThemeProvider.CreateDefault());
 
         await svc.LookupAsync("Test Movie", isTv: false, year: null);
 

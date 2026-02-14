@@ -8,6 +8,13 @@ namespace BugZapperLabs.RipSharp.Utilities;
 /// </summary>
 public class SpectreProgressDisplay : IProgressDisplay
 {
+    private readonly IThemeProvider _theme;
+
+    public SpectreProgressDisplay(IThemeProvider theme)
+    {
+        _theme = theme;
+    }
+
     public async Task ExecuteAsync(Func<IProgressContext, Task> action)
     {
         var liveContext = new LiveProgressContext();
@@ -49,7 +56,7 @@ public class SpectreProgressDisplay : IProgressDisplay
             });
     }
 
-    private static IRenderable Render(LiveProgressContext ctx)
+    private IRenderable Render(LiveProgressContext ctx)
     {
         var (ripTask, encodeTask, overallTask) = ctx.GetLatest();
 
@@ -57,7 +64,7 @@ public class SpectreProgressDisplay : IProgressDisplay
         {
             Header = new PanelHeader("Ripping", Justify.Left),
             Border = BoxBorder.Rounded,
-            BorderStyle = CustomColors.Success,
+            BorderStyle = _theme.SuccessColor,
             Expand = true
         };
 
@@ -65,7 +72,7 @@ public class SpectreProgressDisplay : IProgressDisplay
         {
             Header = new PanelHeader("Encoding", Justify.Left),
             Border = BoxBorder.Rounded,
-            BorderStyle = CustomColors.Highlight,
+            BorderStyle = _theme.HighlightColor,
             Expand = true
         };
 
@@ -73,7 +80,7 @@ public class SpectreProgressDisplay : IProgressDisplay
         {
             Header = new PanelHeader("Overall Progress", Justify.Left),
             Border = BoxBorder.Rounded,
-            BorderStyle = CustomColors.Accent,
+            BorderStyle = _theme.AccentColor,
             Expand = true
         };
 
@@ -86,11 +93,11 @@ public class SpectreProgressDisplay : IProgressDisplay
         return grid;
     }
 
-    private static IRenderable RenderTask(LiveTask? task, string label)
+    private IRenderable RenderTask(LiveTask? task, string label)
     {
         if (task == null)
         {
-            return new Text($"Waiting for {label.ToLower()} to start...", new Style(CustomColors.Muted));
+            return new Text($"Waiting for {label.ToLower()} to start...", new Style(_theme.MutedColor));
         }
 
         var percent = task.MaxValue > 0 ? Math.Clamp((double)task.Value / task.MaxValue, 0, 1) : 0;
@@ -120,13 +127,13 @@ public class SpectreProgressDisplay : IProgressDisplay
         var timeInfo = $"{elapsedStr} / {remainingStr}";
 
         // Combine filled and empty bars with different colors
-        var barRenderable = new Markup($"[{ConsoleColors.Success}]{filledBar}[/][{ConsoleColors.Muted}]{emptyBar}[/]");
+        var barRenderable = new Markup($"[{_theme.Colors.Success}]{filledBar}[/][{_theme.Colors.Muted}]{emptyBar}[/]");
 
         var progressBar = new Columns(new IRenderable[]
         {
             barRenderable,
-            new Text($"{pctText}%", CustomColors.Accent),
-            new Text($"  {timeInfo}", CustomColors.Muted)
+            new Text($"{pctText}%", _theme.AccentColor),
+            new Text($"  {timeInfo}", _theme.MutedColor)
         });
 
         var messages = task.GetRecentMessages(5);
@@ -138,7 +145,7 @@ public class SpectreProgressDisplay : IProgressDisplay
         var rows = new List<IRenderable> { progressBar };
         foreach (var msg in messages)
         {
-            rows.Add(new Text(msg, new Style(CustomColors.Muted)));
+            rows.Add(new Text(msg, new Style(_theme.MutedColor)));
         }
 
         return new Rows(rows);

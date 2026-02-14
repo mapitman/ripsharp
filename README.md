@@ -206,6 +206,51 @@ macOS:
 
 If no config file exists, RipSharp creates one in the first personal location above (for example, `$XDG_CONFIG_HOME/ripsharp/config.yaml` on Linux).
 
+## Theming
+
+Themes are loaded from a YAML file located under a `themes` subdirectory in the config directory and bound to options. On startup, RipSharp writes bundled themes into that directory if they are missing and does not overwrite existing files. Set the theme name in your config file:
+
+```yaml
+theme: "catppuccin mocha"
+```
+
+Built-in themes:
+
+- "catppuccin latte"
+- "catppuccin frappe"
+- "catppuccin macchiato"
+- "catppuccin mocha"
+- "dracula"
+- "nord"
+- "tokyo-night"
+- "gruvbox dark"
+- "gruvbox light"
+
+Theme file format (YAML):
+
+```yaml
+theme:
+   colors:
+      success: "#94e2d5"
+      error: "#f38ba8"
+      warning: "#f9e2af"
+      info: "#89b4fa"
+      accent: "#89dceb"
+      muted: "#6c7086"
+      highlight: "#cba6f7"
+   emojis:
+      success: "✓"
+      error: "❌"
+      warning: "⚠️"
+      insert_disc: "💿"
+      disc_detected: "📀"
+      scan: "🔍"
+      disc_type: "💽"
+      title_found: "🎞️"
+      tv: "📺"
+      movie: "🎬"
+```
+
 ## Building
 
 ```bash

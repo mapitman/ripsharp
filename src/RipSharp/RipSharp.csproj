@@ -22,5 +22,9 @@
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Core/appsettings.yaml" LogicalName="BugZapperLabs.RipSharp.DefaultConfig" />
+    <EmbeddedResource Include="themes/*.yaml" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="themes/*.yaml" CopyToOutputDirectory="PreserveNewest" Pack="true" PackagePath="contentFiles/any/any/themes/" />
   </ItemGroup>
 </Project>

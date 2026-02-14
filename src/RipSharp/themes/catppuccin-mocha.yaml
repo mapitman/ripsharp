@@ -1,0 +1,20 @@
+theme:
+  colors:
+    success: "#94e2d5"
+    error: "#f38ba8"
+    warning: "#f9e2af"
+    info: "#89b4fa"
+    accent: "#89dceb"
+    muted: "#6c7086"
+    highlight: "#cba6f7"
+  emojis:
+    success: "✓"
+    error: "❌"
+    warning: "⚠️"
+    insert_disc: "💿"
+    disc_detected: "📀"
+    scan: "🔍"
+    disc_type: "💽"
+    title_found: "🎞️"
+    tv: "📺"
+    movie: "🎬"
