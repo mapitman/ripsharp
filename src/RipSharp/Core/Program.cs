@@ -4,7 +4,6 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
-
 namespace BugZapperLabs.RipSharp.Core;
 
 public class Program
@@ -36,16 +35,18 @@ public class Program
     private static async Task<int> RunAsync(string[] args, CursorManager cursorManager)
     {
         var options = RipOptions.ParseArgs(args);
+        var defaultTheme = ThemeProvider.CreateDefault();
+        var consoleWriter = new ConsoleWriter(defaultTheme);
 
         if (options.ShowHelp)
         {
-            RipOptions.DisplayHelp(new ConsoleWriter());
+            RipOptions.DisplayHelp(consoleWriter);
             return 0;
         }
 
         if (options.ShowVersion)
         {
-            Console.WriteLine($"ripsharp {GetVersion()}");
+            consoleWriter.Plain($"ripsharp {GetVersion()}");
             return 0;
         }
 
@@ -56,7 +57,7 @@ public class Program
 
         if (missingTools.Count > 0)
         {
-            var prereqWriter = new ConsoleWriter();
+            var prereqWriter = consoleWriter;
             prereqWriter.Error("Missing required prerequisites:");
             foreach (var tool in missingTools)
             {
@@ -105,11 +106,32 @@ public class Program
                     cfg.AddYamlFile(configPath, optional: false, reloadOnChange: true);
                 }
 
+                ThemeFileLocator.EnsureBundledThemeFiles(
+                    configPath,
+                    File.Exists,
+                    File.WriteAllText,
+                    path => Directory.CreateDirectory(path));
+
+                var tempConfig = cfg.Build();
+                var themeSetting = tempConfig.GetValue<string>("theme");
+                if (string.IsNullOrWhiteSpace(themeSetting))
+                {
+                    themeSetting = tempConfig.GetSection("theme").GetValue<string>("path");
+                }
+                var resolvedThemePath = ThemeFileLocator.ResolveThemePath(themeSetting, configPath);
+
+                if (!string.IsNullOrWhiteSpace(resolvedThemePath))
+                {
+                    cfg.AddYamlFile(resolvedThemePath, optional: true, reloadOnChange: true);
+                }
+
                 cfg.AddEnvironmentVariables();
             })
             .ConfigureServices((ctx, services) =>
             {
                 services.Configure<AppConfig>(ctx.Configuration);
+                services.Configure<ThemeOptions>(ctx.Configuration.GetSection("theme"));
+                services.AddSingleton<IThemeProvider, ThemeProvider>();
                 services.AddSingleton<IConsoleWriter, ConsoleWriter>();
                 services.AddSingleton<IProgressDisplay, SpectreProgressDisplay>();
                 services.AddSingleton<IUserPrompt, ConsoleUserPrompt>();
@@ -155,6 +177,7 @@ public class Program
 
         var ripper = host.Services.GetRequiredService<IDiscRipper>();
         var writer = host.Services.GetRequiredService<IConsoleWriter>();
+        var theme = host.Services.GetRequiredService<IThemeProvider>();
 
         List<string> files;
         try
@@ -163,7 +186,7 @@ public class Program
         }
         catch (OperationCanceledException)
         {
-            writer.Warning("\n⚠️  Operation interrupted by user");
+            writer.Warning($"\n{theme.Emojis.Warning}  Operation interrupted by user");
             return 130;
         }
 

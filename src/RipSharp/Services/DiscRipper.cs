@@ -1,6 +1,5 @@
 using System.Threading.Channels;
 
-
 namespace BugZapperLabs.RipSharp.Services;
 
 // Job records for channel communication
@@ -27,6 +26,7 @@ public class DiscRipper : IDiscRipper
     private readonly IUserPrompt _userPrompt;
     private readonly ITvEpisodeTitleProvider _episodeTitles;
     private readonly IProgressDisplay _progressDisplay;
+    private readonly IThemeProvider _theme;
 
     private record TitlePlan(
         int TitleId,
@@ -38,7 +38,7 @@ public class DiscRipper : IDiscRipper
         string? VersionSuffix,
         string DisplayName);
 
-    public DiscRipper(IDiscScanner scanner, IEncoderService encoder, IMetadataService metadata, IMakeMkvService makeMkv, IConsoleWriter notifier, IUserPrompt userPrompt, ITvEpisodeTitleProvider episodeTitles, IProgressDisplay progressDisplay)
+    public DiscRipper(IDiscScanner scanner, IEncoderService encoder, IMetadataService metadata, IMakeMkvService makeMkv, IConsoleWriter notifier, IUserPrompt userPrompt, ITvEpisodeTitleProvider episodeTitles, IProgressDisplay progressDisplay, IThemeProvider theme)
     {
         _scanner = scanner;
         _encoder = encoder;
@@ -48,6 +48,7 @@ public class DiscRipper : IDiscRipper
         _userPrompt = userPrompt;
         _episodeTitles = episodeTitles;
         _progressDisplay = progressDisplay;
+        _theme = theme;
     }
 
     public async Task<List<string>> ProcessDiscAsync(RipOptions options, CancellationToken cancellationToken = default)
@@ -216,7 +217,7 @@ public class DiscRipper : IDiscRipper
             if (discInfo.DetectedContentType.HasValue && discInfo.DetectionConfidence >= minConfidenceThreshold)
             {
                 var contentType = discInfo.DetectedContentType.Value ? "TV series" : "movie";
-                var emoji = discInfo.DetectedContentType.Value ? "\ud83d\udcfa " : "\ud83c\udfac "; // 📺 for TV, 🎬 for movie
+                var emoji = discInfo.DetectedContentType.Value ? $"{_theme.Emojis.Tv} " : $"{_theme.Emojis.Movie} ";
                 var confidencePercent = (int)(discInfo.DetectionConfidence * 100);
                 _notifier.Info($"{emoji}Detected as {contentType} (confidence: {confidencePercent}%)");
                 options.Tv = discInfo.DetectedContentType.Value;
@@ -281,7 +282,7 @@ public class DiscRipper : IDiscRipper
             {
                 var expectedBytes = titleInfo?.ReportedSizeBytes ?? 0;
                 var maxValue = expectedBytes > 0 ? expectedBytes : 100;
-                var task = ctx.AddTask($"[{ConsoleColors.Success}]Title {idx + 1} ({idx + 1}/{totalTitles})[/]", maxValue);
+                var task = ctx.AddTask($"[{_theme.Colors.Success}]Title {idx + 1} ({idx + 1}/{totalTitles})[/]", maxValue);
                 bool ripDone = false;
 
                 var pollTask = Task.Run(async () =>
@@ -313,7 +314,7 @@ public class DiscRipper : IDiscRipper
                 });
 
                 var rawLogPath = Path.Combine(options.Temp!, $"makemkv_title_{titleId:D2}.log");
-                var handler = new MakeMkvOutputHandler(expectedBytes, idx, totalTitles, task, progressLogPath, rawLogPath, _notifier);
+                var handler = new MakeMkvOutputHandler(expectedBytes, idx, totalTitles, task, progressLogPath, rawLogPath, _notifier, _theme);
                 var exit = await _makeMkv.RipTitleAsync(options.Disc, titleId, options.Temp!,
                     onOutput: handler.HandleLine,
                     onError: errLine =>
@@ -329,7 +330,7 @@ public class DiscRipper : IDiscRipper
 
                 if (exit != 0)
                 {
-                    task.Description = $"[{ConsoleColors.Error}]Failed: Title {titleId}[/]";
+                    task.Description = $"[{_theme.Colors.Error}]Failed: Title {titleId}[/]";
                     task.StopTask();
                     _notifier.Error($"Failed to rip title {titleId}");
                     return;
@@ -444,7 +445,7 @@ public class DiscRipper : IDiscRipper
         var expectedBytes = titleInfo?.ReportedSizeBytes ?? 0;
         var durationSeconds = titleInfo?.DurationSeconds ?? 0;
         var rawLogPath = Path.Combine(options.Temp!, $"makemkv_title_{titleId:D2}.log");
-        var handler = new MakeMkvOutputHandler(expectedBytes, idx, totalTitles, null, progressLogPath, rawLogPath, _notifier);
+        var handler = new MakeMkvOutputHandler(expectedBytes, idx, totalTitles, null, progressLogPath, rawLogPath, _notifier, _theme);
 
         bool ripDone = false;
         double observedMaxBytes = 1; // prevent divide-by-zero

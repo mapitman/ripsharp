@@ -13,3 +13,5 @@ encoding:
 
 metadata:
   lookup_enabled: true
+
+theme: "catppuccin mocha"

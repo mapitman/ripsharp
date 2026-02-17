@@ -11,11 +11,12 @@ public class MakeMkvOutputHandler
     private readonly string _progressLogPath;
     private readonly string _rawLogPath;
     private readonly IConsoleWriter _writer;
+    private readonly IThemeProvider _theme;
 
     public double LastBytesProcessed { get; private set; }
     public double LastProgressFraction { get; private set; }
 
-    public MakeMkvOutputHandler(long expectedBytes, int index, int totalTitles, IProgressTask? task, string progressLogPath, string rawLogPath, IConsoleWriter writer)
+    public MakeMkvOutputHandler(long expectedBytes, int index, int totalTitles, IProgressTask? task, string progressLogPath, string rawLogPath, IConsoleWriter writer, IThemeProvider theme)
     {
         _expectedBytes = expectedBytes;
         _index = index;
@@ -24,6 +25,7 @@ public class MakeMkvOutputHandler
         _progressLogPath = progressLogPath;
         _rawLogPath = rawLogPath;
         _writer = writer;
+        _theme = theme;
     }
 
     public void HandleLine(string line)
@@ -81,7 +83,7 @@ public class MakeMkvOutputHandler
             if (!string.IsNullOrEmpty(caption))
             {
                 if (_task != null)
-                    _task.Description = $"[{ConsoleColors.Success}]{caption} ({_index + 1}/{_totalTitles})[/]";
+                    _task.Description = $"[{_theme.Colors.Success}]{caption} ({_index + 1}/{_totalTitles})[/]";
             }
             TryAppend(_progressLogPath, $"PRGC {caption}\n");
         }

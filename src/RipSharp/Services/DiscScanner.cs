@@ -7,18 +7,20 @@ public class DiscScanner : IDiscScanner
     private readonly IProcessRunner _runner;
     private readonly IConsoleWriter _notifier;
     private readonly IDiscTypeDetector _typeDetector;
+    private readonly IThemeProvider _theme;
 
-    public DiscScanner(IProcessRunner runner, IConsoleWriter notifier, IDiscTypeDetector typeDetector)
+    public DiscScanner(IProcessRunner runner, IConsoleWriter notifier, IDiscTypeDetector typeDetector, IThemeProvider theme)
     {
         _runner = runner;
         _notifier = notifier;
         _typeDetector = typeDetector;
+        _theme = theme;
     }
 
     public async Task<DiscInfo?> ScanDiscAsync(string discPath)
     {
         var titles = new List<TitleInfo>();
-        var handler = new ScanOutputHandler(_notifier, titles);
+        var handler = new ScanOutputHandler(_notifier, _theme, titles);
 
         var exit = await _runner.RunAsync("makemkvcon", $"-r --robot info {discPath}",
             onOutput: handler.HandleLine);
@@ -27,7 +29,7 @@ public class DiscScanner : IDiscScanner
 
         if (handler.TitleAddedCount > 0)
         {
-            _notifier.Success($"✓ Scan complete - found {handler.TitleAddedCount} title(s)");
+            _notifier.Success($"{_theme.Emojis.Success} Scan complete - found {handler.TitleAddedCount} title(s)");
         }
 
         return BuildDiscInfo(handler.DiscName, handler.DiscType, titles);
@@ -76,8 +78,6 @@ public class DiscScanner : IDiscScanner
             return ids;
         }
     }
-
-
 
     private static int ParseDurationToSeconds(string? s)
     {

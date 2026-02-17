@@ -107,8 +107,6 @@ dotnet run --project src/RipSharp -- --mode tv --disc disc:1 --title "Friends" -
 
 ## Advanced Examples
 
-
-
 ## Specific Scenarios
 
 ### 4K UltraHD Blu-Ray
