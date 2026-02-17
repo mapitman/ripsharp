@@ -1,6 +1,5 @@
 using System.Text.Json;
 
-
 namespace BugZapperLabs.RipSharp.Services;
 
 public class EncoderService : IEncoderService

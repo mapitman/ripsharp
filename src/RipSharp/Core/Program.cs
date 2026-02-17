@@ -4,7 +4,6 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
-
 namespace BugZapperLabs.RipSharp.Core;
 
 public class Program
@@ -37,17 +36,17 @@ public class Program
     {
         var options = RipOptions.ParseArgs(args);
         var defaultTheme = ThemeProvider.CreateDefault();
-        var earlyWriter = new ConsoleWriter(defaultTheme);
+        var consoleWriter = new ConsoleWriter(defaultTheme);
 
         if (options.ShowHelp)
         {
-            RipOptions.DisplayHelp(earlyWriter);
+            RipOptions.DisplayHelp(consoleWriter);
             return 0;
         }
 
         if (options.ShowVersion)
         {
-            Console.WriteLine($"ripsharp {GetVersion()}");
+            consoleWriter.Plain($"ripsharp {GetVersion()}");
             return 0;
         }
 
@@ -58,7 +57,7 @@ public class Program
 
         if (missingTools.Count > 0)
         {
-            var prereqWriter = earlyWriter;
+            var prereqWriter = consoleWriter;
             prereqWriter.Error("Missing required prerequisites:");
             foreach (var tool in missingTools)
             {

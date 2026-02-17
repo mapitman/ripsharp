@@ -1,6 +1,5 @@
 using System.Threading.Channels;
 
-
 namespace BugZapperLabs.RipSharp.Services;
 
 // Job records for channel communication

@@ -79,8 +79,6 @@ public class DiscScanner : IDiscScanner
         }
     }
 
-
-
     private static int ParseDurationToSeconds(string? s)
     {
         if (string.IsNullOrEmpty(s)) return 0;
