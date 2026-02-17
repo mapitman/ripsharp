@@ -12,6 +12,7 @@ help:
 	@echo "  make format    - Run dotnet format"
 	@echo "  make test      - Run tests"
 	@echo "  make pack      - Build NuGet package (Release)"
+	@echo "  make install   - Install ripsharp as a global dotnet tool (local package)"
 	@echo "  make clean     - Clean build outputs"
 
 # Restore NuGet packages
@@ -33,6 +34,11 @@ test: build
 # Build NuGet package (Release)
 pack: build
 	dotnet pack -c Release src/RipSharp
+
+# Install ripsharp as a global dotnet tool from local package output
+install: pack
+	@dotnet tool update --global BugZapperLabs.RipSharp --add-source src/RipSharp/bin/Release \
+	|| dotnet tool install --global BugZapperLabs.RipSharp --add-source src/RipSharp/bin/Release
 
 # Clean build outputs
 clean:
