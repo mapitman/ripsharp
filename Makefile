@@ -37,8 +37,8 @@ pack: build
 
 # Install ripsharp as a global dotnet tool from local package output
 install: pack
-	@dotnet tool update --global BugZapperLabs.RipSharp --add-source src/RipSharp/bin/Release \
-	|| dotnet tool install --global BugZapperLabs.RipSharp --add-source src/RipSharp/bin/Release
+	@dotnet tool uninstall --global BugZapperLabs.RipSharp >/dev/null 2>&1 || true
+	@dotnet tool install --global BugZapperLabs.RipSharp --add-source src/RipSharp/bin/Release
 
 # Clean build outputs
 clean:
