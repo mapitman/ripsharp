@@ -94,48 +94,65 @@ public class RipOptions
 
     public static void DisplayHelp(IConsoleWriter writer)
     {
-        writer.Plain("ripsharp - DVD/Blu-Ray/UHD disc ripping tool");
+        const int optionWidth = 26;
+        var detailIndent = new string(' ', 4 + optionWidth + 1);
+
+        void OptionLine(string option, string description)
+        {
+            writer.Highlight($"    {option.PadRight(optionWidth)} {description}");
+        }
+
+        void OptionDetail(string description)
+        {
+            writer.Muted($"{detailIndent}{description}");
+        }
+
+        writer.Accent("ripsharp - DVD/Blu-Ray/UHD disc ripping tool");
         writer.Plain("");
-        writer.Plain("USAGE:");
-        writer.Plain("    dotnet run --project src/RipSharp -- [OPTIONS]");
+        writer.Accent("USAGE:");
+        writer.Plain("    ripsharp (OPTIONS)");
         writer.Plain("");
-        writer.Plain("REQUIRED OPTIONS:");
-        writer.Plain("    --output PATH           Output directory for ripped files");
+        writer.Accent("REQUIRED OPTIONS:");
+        OptionLine("--output PATH", "Output directory for ripped files");
         writer.Plain("");
-        writer.Plain("OPTIONS:");
-        writer.Plain("    --mode auto|movie|tv    Content type detection (default: auto)");
-        writer.Plain("                            - auto: Automatically detect movie vs TV series");
-        writer.Plain("                            - movie: Treat as single movie");
-        writer.Plain("                            - tv: Treat as TV series");
-        writer.Plain("    --disc PATH             Optical drive path (default: disc:0)");
-        writer.Plain("    --temp PATH             Temporary ripping directory (default: {output}/<RANDOM_STRING>)");
-        writer.Plain("    --title TEXT            Custom title for file naming");
-        writer.Plain("    --year YYYY             Release year (movies only)");
-        writer.Plain("    --season N              Season number (TV only, default: 1)");
-        writer.Plain("    --episode-start N       Starting episode number (TV only, default: 1)");
-        writer.Plain("    --disc-type TYPE        Override disc type: dvd|bd|uhd (auto-detect by default)");
-        writer.Plain("    --sequential            Disable parallel processing (rip all, then encode all)");
-        writer.Plain("    --debug                 Enable debug logging");
-        writer.Plain("    -h, --help              Show this help message");
-        writer.Plain("    -v, --version           Show the application version");
+        writer.Accent("OPTIONS:");
+        OptionLine("--mode auto|movie|series", "Content type detection (default: auto)");
+        OptionDetail("- auto: Automatically detect movie vs series");
+        OptionDetail("- movie: Treat as single movie");
+        OptionDetail("- series: Treat as series");
+        OptionLine("--disc PATH", "Optical drive path (default: disc:0)");
+        OptionLine("--temp PATH", "Temporary ripping directory");
+        OptionDetail("Default: {output}/<RANDOM_STRING>");
+        OptionLine("--title TEXT", "Custom title for file naming");
+        OptionLine("--year YYYY", "Release year (movies only)");
+        OptionLine("--season N", "Season number (TV only, default: 1)");
+        OptionLine("--episode-start N", "Starting episode number (TV only, default: 1)");
+        OptionLine("--disc-type TYPE", "Override disc type: dvd|bd|uhd");
+        OptionDetail("Default: auto-detect");
+        OptionLine("--sequential", "Disable parallel processing");
+        OptionDetail("Rip all, then encode all");
+        OptionLine("--debug", "Enable debug logging");
+        OptionLine("-h, --help", "Show this help message");
+        OptionLine("-v, --version", "Show the application version");
         writer.Plain("");
-        writer.Plain("EXAMPLES:");
-        writer.Plain("    # Rip with auto-detection (recommended)");
-        writer.Plain("    dotnet run --project src/RipSharp -- --output ~/Movies --title \"The Matrix\" --year 1999");
+        writer.Accent("EXAMPLES:");
+        writer.Muted("    # Rip with auto-detection (recommended)");
+        writer.Plain("    ripsharp --output ~/Movies --title \"The Matrix\" --year 1999");
         writer.Plain("");
-        writer.Plain("    # Rip a movie (explicit)");
-        writer.Plain("    dotnet run --project src/RipSharp -- --output ~/Movies --mode movie --title \"The Matrix\" --year 1999");
+        writer.Muted("    # Rip a movie (explicit)");
+        writer.Plain("    ripsharp --output ~/Movies --mode movie --title \"The Matrix\" --year 1999");
         writer.Plain("");
-        writer.Plain("    # Rip a TV season (explicit)");
-        writer.Plain("    dotnet run --project src/RipSharp -- --output ~/TV --mode tv --title \"Breaking Bad\" --season 1");
+        writer.Muted("    # Rip a series season (explicit)");
+        writer.Plain("    ripsharp --output ~/Series --mode series --title \"Breaking Bad\" --season 1");
         writer.Plain("");
-        writer.Plain("    # Use second disc drive");
-        writer.Plain("    dotnet run --project src/RipSharp -- --output ~/Movies --disc disc:1");
+        writer.Muted("    # Use second disc drive");
+        writer.Plain("    ripsharp --output ~/Movies --disc disc:1");
         writer.Plain("");
-        writer.Plain("ENVIRONMENT VARIABLES:");
-        writer.Plain("    TMDB_API_KEY            TMDB API key for metadata lookup (recommended)");
-        writer.Plain("    OMDB_API_KEY            OMDB API key for metadata lookup (optional)");
+        writer.Accent("ENVIRONMENT VARIABLES:");
+        writer.Highlight("    TMDB_API_KEY    TMDB API key for metadata lookup (recommended)");
+        writer.Highlight("    TVDB_API_KEY    TVDB API key for metadata lookup (optional)");
+        writer.Highlight("    OMDB_API_KEY    OMDB API key for metadata lookup (optional)");
         writer.Plain("");
-        writer.Plain("For more information, visit: https://github.com/mapitman/ripsharp");
+        writer.Muted("For more information, visit: https://github.com/mapitman/ripsharp");
     }
 }

@@ -43,6 +43,73 @@ public class RipOptionsTests
     }
 
     [Fact]
+    public void DisplayHelp_AlignsOptionDescriptions()
+    {
+        var writer = Substitute.For<IConsoleWriter>();
+        var lines = new List<string>();
+
+        void Capture(Action<IConsoleWriter> setup)
+        {
+            setup(writer);
+        }
+
+        Capture(w => w.When(c => c.Info(Arg.Any<string>()))
+            .Do(call => lines.Add(call.Arg<string>())));
+        Capture(w => w.When(c => c.Success(Arg.Any<string>()))
+            .Do(call => lines.Add(call.Arg<string>())));
+        Capture(w => w.When(c => c.Warning(Arg.Any<string>()))
+            .Do(call => lines.Add(call.Arg<string>())));
+        Capture(w => w.When(c => c.Error(Arg.Any<string>()))
+            .Do(call => lines.Add(call.Arg<string>())));
+        Capture(w => w.When(c => c.Muted(Arg.Any<string>()))
+            .Do(call => lines.Add(call.Arg<string>())));
+        Capture(w => w.When(c => c.Accent(Arg.Any<string>()))
+            .Do(call => lines.Add(call.Arg<string>())));
+        Capture(w => w.When(c => c.Highlight(Arg.Any<string>()))
+            .Do(call => lines.Add(call.Arg<string>())));
+        Capture(w => w.When(c => c.Plain(Arg.Any<string>()))
+            .Do(call => lines.Add(call.Arg<string>())));
+
+        RipOptions.DisplayHelp(writer);
+
+        lines.Should().Contain("    ripsharp (OPTIONS)");
+
+        var optionLines = lines
+            .Where(line => line.StartsWith("    --") || line.StartsWith("    -h") || line.StartsWith("    -v"))
+            .ToList();
+
+        optionLines.Should().NotBeEmpty();
+
+        var descriptionStart = optionLines
+            .Select(GetDescriptionStartIndex)
+            .Distinct()
+            .Single();
+
+        var detailLines = lines
+            .Where(line => line.Contains("- auto:") || line.Contains("- movie:") || line.Contains("- series:"))
+            .ToList();
+
+        detailLines.Should().NotBeEmpty();
+        detailLines.All(line => line.IndexOf('-') == descriptionStart).Should().BeTrue();
+
+        static int GetDescriptionStartIndex(string line)
+        {
+            var index = line.LastIndexOf("  ", StringComparison.Ordinal);
+            if (index < 0)
+            {
+                return line.Length;
+            }
+
+            while (index < line.Length && line[index] == ' ')
+            {
+                index++;
+            }
+
+            return index;
+        }
+    }
+
+    [Fact]
     public void ParseArgs_WithVersionShortFlag_SetsShowVersionTrue()
     {
         var args = new[] { "-v" };
