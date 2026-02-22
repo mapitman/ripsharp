@@ -441,23 +441,23 @@ public class RipOptionsTests
     }
 
     [Fact]
-    public void ParseArgs_WithInvalidSeason_KeepsDefault()
+    public void ParseArgs_WithInvalidSeason_RemainsNull()
     {
         var args = new[] { "--output", "/tmp/movies", "--season", "not-a-number" };
 
         var result = RipOptions.ParseArgs(args);
 
-        result.Season.Should().Be(1);
+        result.Season.Should().BeNull();
     }
 
     [Fact]
-    public void ParseArgs_WithoutSeason_DefaultsTo1()
+    public void ParseArgs_WithoutSeason_DefaultsToNull()
     {
         var args = new[] { "--output", "/tmp/movies" };
 
         var result = RipOptions.ParseArgs(args);
 
-        result.Season.Should().Be(1);
+        result.Season.Should().BeNull();
     }
 
     [Fact]
@@ -471,23 +471,23 @@ public class RipOptionsTests
     }
 
     [Fact]
-    public void ParseArgs_WithInvalidEpisodeStart_KeepsDefault()
+    public void ParseArgs_WithInvalidEpisodeStart_RemainsNull()
     {
         var args = new[] { "--output", "/tmp/movies", "--episode-start", "invalid" };
 
         var result = RipOptions.ParseArgs(args);
 
-        result.EpisodeStart.Should().Be(1);
+        result.EpisodeStart.Should().BeNull();
     }
 
     [Fact]
-    public void ParseArgs_WithoutEpisodeStart_DefaultsTo1()
+    public void ParseArgs_WithoutEpisodeStart_DefaultsToNull()
     {
         var args = new[] { "--output", "/tmp/movies" };
 
         var result = RipOptions.ParseArgs(args);
 
-        result.EpisodeStart.Should().Be(1);
+        result.EpisodeStart.Should().BeNull();
     }
 
     [Fact]
@@ -632,7 +632,7 @@ public class RipOptionsTests
         result.Tv.Should().BeTrue();
         result.Title.Should().Be("Breaking Bad");
         result.Season.Should().Be(1);
-        result.EpisodeStart.Should().Be(1);
+        result.EpisodeStart.Should().BeNull();
     }
 
     [Fact]
@@ -653,5 +653,175 @@ public class RipOptionsTests
         var result = RipOptions.ParseArgs(args);
 
         result.EnableParallelProcessing.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ParseArgs_WithPreviewFlag_SetsPreviewTrue()
+    {
+        var args = new[] { "--output", "/tmp/movies", "--preview" };
+
+        var result = RipOptions.ParseArgs(args);
+
+        result.Preview.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ParseArgs_WithoutPreviewFlag_DefaultsToFalse()
+    {
+        var args = new[] { "--output", "/tmp/movies" };
+
+        var result = RipOptions.ParseArgs(args);
+
+        result.Preview.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ParseArgs_WithErrorIgnore_SetsErrorModeIgnore()
+    {
+        var args = new[] { "--output", "/tmp/movies", "--error", "ignore" };
+
+        var result = RipOptions.ParseArgs(args);
+
+        result.ErrorMode.Should().Be(ErrorMode.Ignore);
+    }
+
+    [Fact]
+    public void ParseArgs_WithErrorPrompt_SetsErrorModePrompt()
+    {
+        var args = new[] { "--output", "/tmp/movies", "--error", "prompt" };
+
+        var result = RipOptions.ParseArgs(args);
+
+        result.ErrorMode.Should().Be(ErrorMode.Prompt);
+    }
+
+    [Fact]
+    public void ParseArgs_WithoutErrorFlag_DefaultsToPrompt()
+    {
+        var args = new[] { "--output", "/tmp/movies" };
+
+        var result = RipOptions.ParseArgs(args);
+
+        result.ErrorMode.Should().Be(ErrorMode.Prompt);
+    }
+
+    [Fact]
+    public void ParseArgs_WithInvalidErrorMode_ThrowsArgumentException()
+    {
+        var args = new[] { "--output", "/tmp/movies", "--error", "invalid" };
+
+        Action act = () => RipOptions.ParseArgs(args);
+
+        act.Should().Throw<ArgumentException>().WithMessage("--error must be 'prompt' or 'ignore'");
+    }
+
+    [Fact]
+    public void ParseArgs_WithConcurrency_SetsConcurrencyValue()
+    {
+        var args = new[] { "--output", "/tmp/movies", "--concurrency", "4" };
+
+        var result = RipOptions.ParseArgs(args);
+
+        result.Concurrency.Should().Be(4);
+    }
+
+    [Fact]
+    public void ParseArgs_WithoutConcurrency_DefaultsTo1()
+    {
+        var args = new[] { "--output", "/tmp/movies" };
+
+        var result = RipOptions.ParseArgs(args);
+
+        result.Concurrency.Should().Be(1);
+    }
+
+    [Fact]
+    public void ParseArgs_WithConcurrencyTooHigh_ThrowsArgumentException()
+    {
+        var args = new[] { "--output", "/tmp/movies", "--concurrency", "9" };
+
+        Action act = () => RipOptions.ParseArgs(args);
+
+        act.Should().Throw<ArgumentException>().WithMessage("--concurrency must be between 1 and 8");
+    }
+
+    [Fact]
+    public void ParseArgs_WithConcurrencyTooLow_ThrowsArgumentException()
+    {
+        var args = new[] { "--output", "/tmp/movies", "--concurrency", "0" };
+
+        Action act = () => RipOptions.ParseArgs(args);
+
+        act.Should().Throw<ArgumentException>().WithMessage("--concurrency must be between 1 and 8");
+    }
+
+    [Fact]
+    public void ParseArgs_WithEpisodeStart_SetsValue()
+    {
+        var args = new[] { "--output", "/tmp/movies", "--episode-start", "5" };
+
+        var result = RipOptions.ParseArgs(args);
+
+        result.EpisodeStart.Should().Be(5);
+    }
+
+    [Fact]
+    public void ParseArgs_WithoutEpisodeStart_IsNull()
+    {
+        var args = new[] { "--output", "/tmp/movies" };
+
+        var result = RipOptions.ParseArgs(args);
+
+        result.EpisodeStart.Should().BeNull();
+    }
+
+    [Fact]
+    public void ParseArgs_WithConcurrencyMin_Succeeds()
+    {
+        var args = new[] { "--output", "/tmp/movies", "--concurrency", "1" };
+
+        var result = RipOptions.ParseArgs(args);
+
+        result.Concurrency.Should().Be(1);
+    }
+
+    [Fact]
+    public void ParseArgs_WithConcurrencyMax_Succeeds()
+    {
+        var args = new[] { "--output", "/tmp/movies", "--concurrency", "8" };
+
+        var result = RipOptions.ParseArgs(args);
+
+        result.Concurrency.Should().Be(8);
+    }
+
+    [Fact]
+    public void ParseArgs_WithConcurrencyNonNumeric_KeepsDefault()
+    {
+        var args = new[] { "--output", "/tmp/movies", "--concurrency", "abc" };
+
+        var result = RipOptions.ParseArgs(args);
+
+        result.Concurrency.Should().Be(1);
+    }
+
+    [Fact]
+    public void ParseArgs_WithErrorIgnoreUpperCase_IsCaseInsensitive()
+    {
+        var args = new[] { "--output", "/tmp/movies", "--error", "IGNORE" };
+
+        var result = RipOptions.ParseArgs(args);
+
+        result.ErrorMode.Should().Be(ErrorMode.Ignore);
+    }
+
+    [Fact]
+    public void ParseArgs_WithErrorMissingValue_ThrowsArgumentException()
+    {
+        var args = new[] { "--output", "/tmp/movies", "--error" };
+
+        Action act = () => RipOptions.ParseArgs(args);
+
+        act.Should().Throw<ArgumentException>().WithMessage("--error must be 'prompt' or 'ignore'");
     }
 }
