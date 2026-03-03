@@ -19,7 +19,7 @@ public class DiscRipperTitleSuffixTests
         };
         var titleIds = new List<int> { 0 };
         var metadata = new ContentMetadata { Title = "Control", Year = 2007, Type = "movie" };
-        var options = new RipOptions { Output = "/tmp" };
+        var options = new RipOptions { Output = "/tmp", Season = 1, EpisodeStart = 1 };
 
         var plans = await InvokeBuildTitlePlansAsync(ripper, discInfo, titleIds, metadata, options);
         plans.Should().HaveCount(1);
@@ -49,33 +49,34 @@ public class DiscRipperTitleSuffixTests
                     Arg.Any<bool>(),
                     Arg.Any<int>(),
                     Arg.Any<int>(),
-                    Arg.Any<IProgressTask?>())
+                    Arg.Any<IProgressTask?>(),
+                    Arg.Any<string?>())
                 .Returns(callInfo =>
                 {
                     var outputPath = callInfo.ArgAt<string>(1);
                     Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
                     File.WriteAllText(outputPath, "data");
-                    return Task.FromResult(true);
+                    return Task.FromResult(new ProcessResult(true, 0, Array.Empty<string>()));
                 });
 
             var ripper = CreateRipper(encoder);
-            var discInfo = new DiscInfo
-            {
-                Titles = new List<TitleInfo>
-                {
-                    new() { Id = 0, Name = "Control" }
-                }
-            };
-            var titleIds = new List<int> { 0 };
             var rippedFilesMap = new Dictionary<int, string> { { 0, sourceFile } };
             var metadata = new ContentMetadata { Title = "Control", Year = 2007, Type = "movie" };
-            var options = new RipOptions { Output = outputRoot };
+            var options = new RipOptions { Output = outputRoot, Season = 1, EpisodeStart = 1 };
+            var titlePlans = new List<TitlePlan>
+            {
+                new(TitleId: 0, Index: 0, EpisodeNum: null, EpisodeTitle: null,
+                    TempOutputPath: Path.Combine(outputRoot, "Control.mkv"),
+                    FinalFileName: "Control (2007).mkv", VersionSuffix: null, DisplayName: "Control")
+            };
 
-            var finalFiles = await InvokeEncodeAndRenameAsync(ripper, discInfo, titleIds, rippedFilesMap, metadata, options);
+            var (successes, failures) = await InvokeEncodeAndRenameAsync(ripper, rippedFilesMap, titlePlans, metadata, options);
 
-            finalFiles.Should().HaveCount(1);
-            finalFiles[0].Should().Be(Path.Combine(outputRoot, "Control (2007).mkv"));
-            finalFiles[0].Should().NotContain("title01");
+            failures.Should().BeEmpty();
+            successes.Should().HaveCount(1);
+            var finalPath = successes[0].FinalPath;
+            finalPath.Should().Be(Path.Combine(outputRoot, "Control (2007).mkv"));
+            finalPath.Should().NotContain("title01");
         }
         finally
         {
@@ -114,21 +115,23 @@ public class DiscRipperTitleSuffixTests
         return ((IEnumerable)result).Cast<object>().ToList();
     }
 
-    private static async Task<List<string>> InvokeEncodeAndRenameAsync(
+    private static async Task<(List<TitleOutcome> Successes, List<TitleOutcome> Failures)> InvokeEncodeAndRenameAsync(
         DiscRipper ripper,
-        DiscInfo discInfo,
-        List<int> titleIds,
         Dictionary<int, string> rippedFilesMap,
+        IReadOnlyList<TitlePlan> titlePlans,
         ContentMetadata metadata,
         RipOptions options)
     {
         var method = typeof(DiscRipper).GetMethod("EncodeAndRenameAsync", BindingFlags.NonPublic | BindingFlags.Instance);
         method.Should().NotBeNull();
 
-        var task = (Task)method!.Invoke(ripper, new object[] { discInfo, titleIds, rippedFilesMap, metadata, options })!;
+        var task = (Task)method!.Invoke(ripper, new object[] { rippedFilesMap, titlePlans, metadata, options })!;
         await task.ConfigureAwait(false);
 
-        return (List<string>)task.GetType().GetProperty("Result")!.GetValue(task)!;
+        var result = task.GetType().GetProperty("Result")!.GetValue(task)!;
+        var successes = (List<TitleOutcome>)result.GetType().GetField("Item1")!.GetValue(result)!;
+        var failures = (List<TitleOutcome>)result.GetType().GetField("Item2")!.GetValue(result)!;
+        return (successes, failures);
     }
 
     private static string? GetStringProperty(object target, string propertyName)

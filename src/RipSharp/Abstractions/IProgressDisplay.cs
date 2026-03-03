@@ -1,3 +1,5 @@
+using BugZapperLabs.RipSharp.Models;
+
 namespace BugZapperLabs.RipSharp.Abstractions;
 
 /// <summary>
@@ -43,6 +45,11 @@ public interface IProgressTask
     bool IsStopped { get; }
 
     /// <summary>
+    /// Gets whether the task has failed.
+    /// </summary>
+    bool IsFailed { get; }
+
+    /// <summary>
     /// Gets the elapsed time since the task started.
     /// </summary>
     TimeSpan GetElapsed();
@@ -58,9 +65,19 @@ public interface IProgressTask
     string Description { get; set; }
 
     /// <summary>
+    /// Starts the elapsed-time clock without changing the progress value.
+    /// </summary>
+    void StartTracking();
+
+    /// <summary>
     /// Stops the task, marking it as complete.
     /// </summary>
     void StopTask();
+
+    /// <summary>
+    /// Marks the task as failed, freezing the elapsed timer without advancing to max value.
+    /// </summary>
+    void FailTask();
 
     /// <summary>
     /// Adds a message to be displayed in this task's panel.
@@ -76,4 +93,15 @@ public interface IProgressTask
     /// Gets the most recent messages, limited to the specified count.
     /// </summary>
     List<string> GetRecentMessages(int count);
+}
+
+public static class ProgressTaskExtensions
+{
+    public static void ReportFailure(this IProgressTask task, ProcessResult result)
+    {
+        task.AddMessage($"FAILED: {result.ErrorSummary}");
+        if (result.LogPath != null)
+            task.AddMessage($"Log: {result.LogPath}");
+        task.FailTask();
+    }
 }

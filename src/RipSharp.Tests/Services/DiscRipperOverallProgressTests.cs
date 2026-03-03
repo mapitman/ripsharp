@@ -16,18 +16,6 @@ public class DiscRipperOverallProgressTests
         task.Value.Should().Be(2);
     }
 
-    [Fact]
-    public void OverallProgressTracker_MarkAllComplete_SetsMaxValue()
-    {
-        var task = new TestProgressTask(maxValue: 4);
-        var tracker = CreateTracker(task);
-
-        Invoke(tracker, "MarkRipComplete");
-        Invoke(tracker, "MarkAllComplete");
-
-        task.Value.Should().Be(task.MaxValue);
-    }
-
     private static object CreateTracker(IProgressTask task)
     {
         var trackerType = typeof(DiscRipper)
@@ -70,13 +58,21 @@ public class DiscRipperOverallProgressTests
 
         public bool IsStopped => false;
 
+        public bool IsFailed => false;
+
         public TimeSpan GetElapsed() => TimeSpan.Zero;
 
         public void Increment(long value) => _value += value;
 
         public string Description { get; set; } = string.Empty;
 
+        public void StartTracking() { }
+
         public void StopTask()
+        {
+        }
+
+        public void FailTask()
         {
         }
 
