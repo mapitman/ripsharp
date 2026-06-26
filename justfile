@@ -1,19 +1,17 @@
-.PHONY: all build test format clean restore pack help
-
 # Default target: build and test the solution
 all: build test
 
 # Show available targets
 help:
 	@echo "Available targets:"
-	@echo "  make all       - Build and test the solution (default)"
-	@echo "  make restore   - Restore NuGet packages"
-	@echo "  make build     - Build the solution"
-	@echo "  make format    - Run dotnet format"
-	@echo "  make test      - Run tests"
-	@echo "  make pack      - Build NuGet package (Release)"
-	@echo "  make install   - Install ripsharp as a global dotnet tool (local package)"
-	@echo "  make clean     - Clean build outputs"
+	@echo "  just all       - Build and test the solution (default)"
+	@echo "  just restore   - Restore NuGet packages"
+	@echo "  just build     - Build the solution"
+	@echo "  just format    - Run dotnet format"
+	@echo "  just test      - Run tests"
+	@echo "  just pack      - Build NuGet package (Release)"
+	@echo "  just install   - Install ripsharp as a global dotnet tool (local package)"
+	@echo "  just clean     - Clean build outputs"
 
 # Restore NuGet packages
 restore:
@@ -24,7 +22,7 @@ build: restore
 	dotnet build RipSharp.sln
 
 # Run code formatter
-format: 
+format:
 	dotnet format RipSharp.sln
 
 # Run tests
