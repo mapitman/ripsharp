@@ -15,21 +15,28 @@ public class ProcessRunner : IProcessRunner
             UseShellExecute = false,
             CreateNoWindow = true
         };
-        using var proc = new Process { StartInfo = psi, EnableRaisingEvents = true };
-        var tcs = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var proc = new Process { StartInfo = psi };
 
         proc.OutputDataReceived += (_, e) => { if (e.Data != null) onOutput?.Invoke(e.Data); };
         proc.ErrorDataReceived += (_, e) => { if (e.Data != null) onError?.Invoke(e.Data); };
-        proc.Exited += (_, __) => tcs.TrySetResult(proc.ExitCode);
 
         if (!proc.Start()) throw new InvalidOperationException($"Failed to start {fileName}");
         proc.BeginOutputReadLine();
         proc.BeginErrorReadLine();
 
-        using (ct.Register(() => { try { if (!proc.HasExited) proc.Kill(true); } catch { } }))
+        try
         {
-            var exit = await tcs.Task.ConfigureAwait(false);
-            return exit;
+            await proc.WaitForExitAsync(ct).ConfigureAwait(false);
+            // WaitForExitAsync alone does not guarantee all async output events have fired.
+            // A synchronous WaitForExit() call afterward drains the redirected streams.
+            proc.WaitForExit();
         }
+        catch (OperationCanceledException)
+        {
+            try { if (!proc.HasExited) proc.Kill(entireProcessTree: true); } catch { }
+            throw;
+        }
+
+        return proc.ExitCode;
     }
 }

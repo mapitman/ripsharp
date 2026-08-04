@@ -24,6 +24,10 @@ public class MetadataService : IMetadataService
                 var result = await provider.LookupAsync(titleVariation, isTv, year);
                 if (result != null)
                 {
+                    result.Provider = provider.Name;
+                    result.SearchTitle = titleVariation;
+                    result.DiscTitle = title;
+
                     if (titleVariation != title)
                         _notifier.Success($"{_theme.Emojis.Success} {provider.Name} {(isTv ? "TV" : "Movie")} lookup found using simplified title '{titleVariation}': '{result.Title}'" + (result.Year.HasValue ? $" ({result.Year.Value})" : ""));
                     else
@@ -34,6 +38,6 @@ public class MetadataService : IMetadataService
         }
 
         _notifier.Warning($"{_theme.Emojis.Warning} No metadata found from available providers for '{title}'. Using disc title as fallback.");
-        return new ContentMetadata { Title = title, Year = year, Type = isTv ? "tv" : "movie" };
+        return new ContentMetadata { Title = title, Year = year, Type = isTv ? "tv" : "movie", DiscTitle = title };
     }
 }

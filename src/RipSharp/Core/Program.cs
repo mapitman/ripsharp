@@ -179,10 +179,10 @@ public class Program
         var writer = host.Services.GetRequiredService<IConsoleWriter>();
         var theme = host.Services.GetRequiredService<IThemeProvider>();
 
-        List<string> files;
+        DiscProcessingResult result;
         try
         {
-            files = await ripper.ProcessDiscAsync(options, _cancellationTokenSource!.Token);
+            result = await ripper.ProcessDiscAsync(options, _cancellationTokenSource!.Token);
         }
         catch (OperationCanceledException)
         {
@@ -190,15 +190,16 @@ public class Program
             return 130;
         }
 
-        if (files.Count > 0)
+        if (result.AllSucceeded)
         {
             return 0;
         }
-        else
+        if (result.AnySucceeded)
         {
-            writer.Error("Failed to process disc");
-            return 1;
+            return 3; // partial failure
         }
+        writer.Error("Failed to process disc");
+        return 1;
     }
 
     private static string GetVersion()

@@ -47,6 +47,76 @@ public class SpectreProgressDisplayTests
     }
 
     [Fact]
+    public void FailTask_SetsIsFailedAndFreezesTimer()
+    {
+        var task = CreateLiveTask("Test", 100);
+        var startTime = DateTime.UtcNow - TimeSpan.FromSeconds(7);
+
+        SetTaskValue(task, 50);
+        SetPrivateField(task, "_startTime", startTime);
+
+        Invoke(task, "FailTask");
+
+        var progressTask = (IProgressTask)task;
+        progressTask.IsFailed.Should().BeTrue();
+        progressTask.IsStopped.Should().BeTrue();
+
+        var stopTime = (DateTime?)GetPrivateField(task, "_stopTime");
+        stopTime.Should().NotBeNull();
+        GetElapsed(task).Should().BeCloseTo(stopTime!.Value - startTime, precision: TimeSpan.FromSeconds(0.25));
+    }
+
+    [Fact]
+    public void FailTask_DoesNotAdvanceValueToMax()
+    {
+        var task = CreateLiveTask("Test", 100);
+
+        SetTaskValue(task, 42);
+
+        Invoke(task, "FailTask");
+
+        var progressTask = (IProgressTask)task;
+        progressTask.Value.Should().Be(42);
+        progressTask.MaxValue.Should().Be(100);
+    }
+
+    [Fact]
+    public void FailTask_IsIdempotent()
+    {
+        var task = CreateLiveTask("Test", 100);
+        var startTime = DateTime.UtcNow - TimeSpan.FromSeconds(5);
+        var firstStopTime = DateTime.UtcNow - TimeSpan.FromSeconds(2);
+
+        SetTaskValue(task, 30);
+        SetPrivateField(task, "_startTime", startTime);
+        SetPrivateField(task, "_stopTime", firstStopTime);
+        SetPrivateField(task, "_isFailed", true);
+        SetPrivateField(task, "_isStopped", true);
+
+        Invoke(task, "FailTask");
+
+        var stopTime = (DateTime?)GetPrivateField(task, "_stopTime");
+        stopTime.Should().Be(firstStopTime);
+    }
+
+    [Fact]
+    public void TaskValueReset_ClearsFailedState()
+    {
+        var task = CreateLiveTask("Test", 100);
+
+        SetTaskValue(task, 50);
+        Invoke(task, "FailTask");
+
+        var progressTask = (IProgressTask)task;
+        progressTask.IsFailed.Should().BeTrue();
+
+        SetTaskValue(task, 0);
+
+        progressTask.IsFailed.Should().BeFalse();
+        progressTask.IsStopped.Should().BeFalse();
+    }
+
+    [Fact]
     public void StopTask_DoesNotOverwriteStopTime()
     {
         var task = CreateLiveTask("Test", 100);

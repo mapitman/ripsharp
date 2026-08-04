@@ -1,6 +1,8 @@
+using BugZapperLabs.RipSharp.Models;
+
 namespace BugZapperLabs.RipSharp.Abstractions;
 
 public interface IDiscRipper
 {
-    Task<List<string>> ProcessDiscAsync(RipOptions options, CancellationToken cancellationToken = default);
+    Task<DiscProcessingResult> ProcessDiscAsync(RipOptions options, CancellationToken cancellationToken = default);
 }

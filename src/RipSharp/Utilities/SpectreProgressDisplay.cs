@@ -20,7 +20,7 @@ public class SpectreProgressDisplay : IProgressDisplay
         var liveContext = new LiveProgressContext();
 
         await AnsiConsole.Live(Render(liveContext))
-            .AutoClear(false)
+            .AutoClear(true)
             .Overflow(VerticalOverflow.Ellipsis)
             .StartAsync(async live =>
             {
@@ -51,46 +51,93 @@ public class SpectreProgressDisplay : IProgressDisplay
                     AnsiConsole.WriteException(ex);
                 }
 
-                // Final render after completion
-                live.UpdateTarget(Render(liveContext));
             });
     }
 
     private IRenderable Render(LiveProgressContext ctx)
     {
-        var (ripTask, encodeTask, overallTask) = ctx.GetLatest();
+        var (ripTask, encodeTasks, overallTask) = ctx.GetSnapshot();
 
-        var ripPanel = new Panel(RenderTask(ripTask, "Ripping"))
+        var grid = new Grid();
+        grid.AddColumn(new GridColumn() { NoWrap = true, Width = null });
+
+        grid.AddRow(new Panel(RenderTask(ripTask, "Ripping"))
         {
             Header = new PanelHeader("Ripping", Justify.Left),
             Border = BoxBorder.Rounded,
             BorderStyle = _theme.SuccessColor,
             Expand = true
-        };
+        });
 
-        var encodePanel = new Panel(RenderTask(encodeTask, "Encoding"))
+        var activeEncodeTasks = encodeTasks.Where(t => !t.IsStopped || t.Value > 0).ToList();
+        if (activeEncodeTasks.Count <= 1)
         {
-            Header = new PanelHeader("Encoding", Justify.Left),
-            Border = BoxBorder.Rounded,
-            BorderStyle = _theme.HighlightColor,
-            Expand = true
-        };
+            var task = activeEncodeTasks.FirstOrDefault() ?? encodeTasks.FirstOrDefault();
+            grid.AddRow(new Panel(RenderTask(task, "Encoding"))
+            {
+                Header = new PanelHeader("Encoding", Justify.Left),
+                Border = BoxBorder.Rounded,
+                BorderStyle = _theme.HighlightColor,
+                Expand = true
+            });
+        }
+        else
+        {
+            for (int i = 0; i < activeEncodeTasks.Count; i++)
+            {
+                grid.AddRow(new Panel(RenderTask(activeEncodeTasks[i], "Encoding"))
+                {
+                    Header = new PanelHeader($"Encoding [[{i + 1}]]", Justify.Left),
+                    Border = BoxBorder.Rounded,
+                    BorderStyle = _theme.HighlightColor,
+                    Expand = true
+                });
+            }
+        }
 
-        var overallPanel = new Panel(RenderTask(overallTask, "Overall"))
+        grid.AddRow(new Panel(RenderOverallTask(overallTask))
         {
-            Header = new PanelHeader("Overall Progress", Justify.Left),
-            Border = BoxBorder.Rounded,
+            Header = new PanelHeader("[bold]Overall Progress[/]", Justify.Left),
+            Border = BoxBorder.Heavy,
             BorderStyle = _theme.AccentColor,
             Expand = true
-        };
-
-        var grid = new Grid();
-        grid.AddColumn(new GridColumn() { NoWrap = true, Width = null });
-        grid.AddRow(ripPanel);
-        grid.AddRow(encodePanel);
-        grid.AddRow(overallPanel);
+        });
 
         return grid;
+    }
+
+    private IRenderable RenderOverallTask(LiveTask? task)
+    {
+        if (task == null)
+        {
+            return new Text("Waiting to start...", new Style(_theme.MutedColor));
+        }
+
+        var percent = task.MaxValue > 0 ? Math.Clamp((double)task.Value / task.MaxValue, 0, 1) : 0;
+        const int barWidth = 80;
+        var filled = (int)Math.Round(percent * barWidth);
+        var empty = Math.Max(0, barWidth - filled);
+        var filledBar = new string('█', filled);
+        var emptyBar = new string('░', empty);
+        var pctText = (percent * 100).ToString("0.0").PadLeft(6);
+
+        var elapsed = task.GetElapsed();
+        var elapsedStr = elapsed.TotalSeconds > 0 ? FormatTimeSpan(elapsed) : "00:00:00";
+
+        var stepsCompleted = task.Value;
+        var stepsTotal = task.MaxValue;
+        var timeInfo = $"{stepsCompleted}/{stepsTotal} steps    {elapsedStr} elapsed";
+
+        var barRenderable = new Markup($"[green]{filledBar}[/][{_theme.Colors.Muted}]{emptyBar}[/]");
+
+        var progressBar = new Columns(new IRenderable[]
+        {
+            barRenderable,
+            new Text($"{pctText}%", _theme.AccentColor),
+            new Text($"  {timeInfo}", _theme.MutedColor)
+        });
+
+        return progressBar;
     }
 
     private IRenderable RenderTask(LiveTask? task, string label)
@@ -108,12 +155,15 @@ public class SpectreProgressDisplay : IProgressDisplay
         var emptyBar = new string('░', empty);
         var pctText = (percent * 100).ToString("0.0").PadLeft(6);
 
-        // Calculate elapsed and remaining time
         var elapsed = task.GetElapsed();
         var elapsedStr = elapsed.TotalSeconds > 0 ? FormatTimeSpan(elapsed) : "00:00:00";
         var remainingStr = "--:--:--";
 
-        if (percent > 0.05 && !task.IsStopped) // Only estimate if we have meaningful progress (>5%)
+        if (task.IsFailed)
+        {
+            remainingStr = "--:--:--";
+        }
+        else if (percent > 0.02 && !task.IsStopped)
         {
             var totalEstimated = elapsed.TotalSeconds / percent;
             var remaining = TimeSpan.FromSeconds(totalEstimated - elapsed.TotalSeconds);
@@ -126,8 +176,8 @@ public class SpectreProgressDisplay : IProgressDisplay
 
         var timeInfo = $"{elapsedStr} / {remainingStr}";
 
-        // Combine filled and empty bars with different colors
-        var barRenderable = new Markup($"[{_theme.Colors.Success}]{filledBar}[/][{_theme.Colors.Muted}]{emptyBar}[/]");
+        var barColor = task.IsFailed ? _theme.Colors.Error : _theme.Colors.Success;
+        var barRenderable = new Markup($"[{barColor}]{filledBar}[/][{_theme.Colors.Muted}]{emptyBar}[/]");
 
         var progressBar = new Columns(new IRenderable[]
         {
@@ -142,10 +192,11 @@ public class SpectreProgressDisplay : IProgressDisplay
             return progressBar;
         }
 
+        var msgStyle = task.IsFailed ? new Style(_theme.ErrorColor) : new Style(_theme.MutedColor);
         var rows = new List<IRenderable> { progressBar };
         foreach (var msg in messages)
         {
-            rows.Add(new Text(msg, new Style(_theme.MutedColor)));
+            rows.Add(new Text(msg, msgStyle));
         }
 
         return new Rows(rows);
@@ -159,7 +210,7 @@ public class SpectreProgressDisplay : IProgressDisplay
     private class LiveProgressContext : IProgressContext
     {
         private readonly List<LiveTask> _tasks = new();
-        private readonly object _lock = new();
+        private readonly Lock _lock = new();
 
         public IProgressTask AddTask(string description, long maxValue)
         {
@@ -171,27 +222,38 @@ public class SpectreProgressDisplay : IProgressDisplay
             return task;
         }
 
-        public (LiveTask? ripTask, LiveTask? encodeTask, LiveTask? overallTask) GetLatest()
+        public (LiveTask? RipTask, List<LiveTask> EncodeTasks, LiveTask? OverallTask) GetSnapshot()
         {
             lock (_lock)
             {
-                // Assume first task is ripping, second is encoding, third is overall
-                var ripTask = _tasks.Count > 0 ? _tasks[0] : null;
-                var encodeTask = _tasks.Count > 1 ? _tasks[1] : null;
-                var overallTask = _tasks.Count > 2 ? _tasks[2] : null;
-                return (ripTask, encodeTask, overallTask);
+                LiveTask? ripTask = null;
+                var encodeTasks = new List<LiveTask>();
+                LiveTask? overallTask = null;
+
+                foreach (var task in _tasks)
+                {
+                    if (task.Description.StartsWith("Ripping") || task.Description == "Ripping")
+                        ripTask = task;
+                    else if (task.Description.StartsWith("Overall") || task.Description == "Overall")
+                        overallTask = task;
+                    else
+                        encodeTasks.Add(task);
+                }
+
+                return (ripTask, encodeTasks, overallTask);
             }
         }
     }
 
     private class LiveTask : IProgressTask
     {
-        private readonly object _lock = new();
+        private readonly Lock _lock = new();
         private long _value;
         private readonly long _maxValue;
         private string _description;
         private readonly List<string> _messages = new();
         private bool _isStopped;
+        private bool _isFailed;
         private DateTime? _startTime;
         private DateTime? _stopTime;
 
@@ -205,6 +267,11 @@ public class SpectreProgressDisplay : IProgressDisplay
         public bool IsStopped
         {
             get { lock (_lock) { return _isStopped; } }
+        }
+
+        public bool IsFailed
+        {
+            get { lock (_lock) { return _isFailed; } }
         }
 
         public TimeSpan GetElapsed()
@@ -233,6 +300,7 @@ public class SpectreProgressDisplay : IProgressDisplay
                         _startTime = null;
                         _stopTime = null;
                         _isStopped = false;
+                        _isFailed = false;
                         return;
                     }
                     // Start tracking time when task first gets progress
@@ -267,6 +335,14 @@ public class SpectreProgressDisplay : IProgressDisplay
             set { lock (_lock) { _description = value; } }
         }
 
+        public void StartTracking()
+        {
+            lock (_lock)
+            {
+                _startTime ??= DateTime.UtcNow;
+            }
+        }
+
         public void StopTask()
         {
             lock (_lock)
@@ -278,6 +354,17 @@ public class SpectreProgressDisplay : IProgressDisplay
                 _value = _maxValue;
                 _isStopped = true;
                 _stopTime = DateTime.UtcNow;
+            }
+        }
+
+        public void FailTask()
+        {
+            lock (_lock)
+            {
+                if (_isFailed) return;
+                _isFailed = true;
+                _isStopped = true;
+                _stopTime ??= DateTime.UtcNow;
             }
         }
 
